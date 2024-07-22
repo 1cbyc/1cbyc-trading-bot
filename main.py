@@ -17,7 +17,7 @@ def main():
     # my alpaca api details (though i want to use an env"
     API_KEY = 'my_api_key'
     API_SECRET = 'my_api_secret'
-    BASE_URL = 'https://paper-api.alpaca.markets'
+    BASE_URL = 'https://paper-api.alpaca.markets/v2'
 
     api = create_api_connection(API_KEY, API_SECRET, BASE_URL)
 
