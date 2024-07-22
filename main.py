@@ -5,28 +5,28 @@ from dotenv import load_dotenv
 import os
 
 def main():
-    # Load environment variables from .env file
+    # load the environment variables from .env file
     load_dotenv()
 
-    # Collecting data from the market
+    # collect the data from the market
     ticker = 'AAPL'
     start_date = "2024-01-01"
     end_date = "2024-07-31"
     data = fetch_market_data(ticker, start_date, end_date)
 
-    # Apply the trading strategy
+    # apply the trading strategy
     short_window = 20
     long_window = 50
     data = moving_average_strategy(data, short_window, long_window)
 
-    # Retrieve API details from environment variables
+    # get the api details from environment variables
     API_KEY = os.getenv('API_KEY')
     API_SECRET = os.getenv('API_SECRET')
     BASE_URL = os.getenv('BASE_URL')
 
     api = create_api_connection(API_KEY, API_SECRET, BASE_URL)
 
-    # Execute trading logic
+    # execute trading logic
     for i in range(len(data)):
         if data['Position'][i] == 1:  # buy trade signal
             place_order(api, ticker, 1, 'buy')
