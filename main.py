@@ -16,7 +16,7 @@ def main():
     short_window = 20
     long_window = 50
 
-    # Retrieve API details from environment variables
+    # retrieve the api details from environment variables
     API_KEY = os.getenv('API_KEY')
     API_SECRET = os.getenv('API_SECRET')
     BASE_URL = os.getenv('BASE_URL')
