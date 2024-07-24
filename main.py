@@ -8,7 +8,9 @@ def main():
     load_dotenv()
 
     # these are the list of tickers to trade
+    # the tickers is for stocks
     tickers = ['AAPL', 'GOOGL', 'MSFT']
+    # tickers = ['BTCUSD', 'ETHUSD', 'XRPUSD']
 
     # definitely common parameters
     start_date = "2024-01-01"
