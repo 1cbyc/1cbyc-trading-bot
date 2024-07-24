@@ -27,7 +27,7 @@ Welcome to the **1cbyc Trading Bot**, your go-to solution for automated stock tr
     ```
 
 3. **Set Up Environment Variables:**
-    Create a `.env` file in the root directory of the project and add your API keys:
+    Create a `.env` file in the root directory of the project using the `.env-example` file i added and add your API keys:
     ```plaintext
     ALPACA_API_KEY=your_api_key
     ALPACA_API_SECRET=your_api_secret
