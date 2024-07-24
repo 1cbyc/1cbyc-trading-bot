@@ -8,7 +8,9 @@ import time
 def main():
     load_dotenv()
 
-    tickers = ['AAPL', 'GOOGL', 'MSFT']
+    # tickers = ['AAPL', 'GOOGL', 'MSFT']
+    # let me trade chips like NVIDIA only for now:
+    tickers = ['NVDA', 'AMD', 'INTC', 'QCOM', 'AVGO', 'TXN', 'MU', 'AMAT', 'LRCX', 'ASML']
 
     start_date = "2024-01-01"
     end_date = "2024-12-31"
@@ -34,13 +36,16 @@ def main():
             if data['Position'].iloc[i] == 1 and last_action != 'buy':  # buy trade signal
                 place_order(api, ticker, 10, 'buy')
                 last_action = 'buy'
-                time.sleep(1)  # ah no wan wash trades
+                # time.sleep(1)  # ah no wan wash trades
             # elif data['Position'].iloc[i] == -1 and last_action != 'sell':  # sell trade signal
             #     place_order(api, ticker, 1, 'sell')
             #     last_action = 'sell'
             #     time.sleep(1)  # i set this delay to prevent wash trades
 
-    print("Trading bot has completed running.")
+    # print("Trading bot has completed running.")
+    # i want to loop it to trade every 1 minute
+    print("opened first batch of trades. will open another next 1 minutes...")
+    time.sleep(60)
 
 if __name__ == "__main__":
     main()
