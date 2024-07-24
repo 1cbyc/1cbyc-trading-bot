@@ -1,0 +1,4 @@
+yfinance
+pandas
+numpy
+alpaca-trade-api
