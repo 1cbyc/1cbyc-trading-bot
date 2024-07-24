@@ -60,7 +60,7 @@ def main():
     tickers = tickers_ai + tickers_real_estate
 
     for ticker in tickers:
-        data = fetch_market_data(ticker, "2022-01-01", "2022-12-31")
+        data = fetch_market_data(ticker, "2024-01-01", "2024-12-31")
         data = moving_average_strategy(data, 20, 50)
         
         api = create_api_connection()
