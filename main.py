@@ -34,10 +34,17 @@ def main():
         data = moving_average_strategy(data, short_window, long_window)
 
         # properly execute trading logic
+        # for i in range(len(data)):
+        #     if data['Position'][i] == 1:  # buy trade signal
+        #         place_order(api, ticker, 1, 'buy')
+        #     elif data['Position'][i] == -1:  # sell trade signal
+        #         place_order(api, ticker, 1, 'sell')
+        #
+        # decided to use iloc instead
         for i in range(len(data)):
-            if data['Position'][i] == 1:  # buy trade signal
+            if data['Position'].iloc[i] == 1:  # buy trade signal
                 place_order(api, ticker, 1, 'buy')
-            elif data['Position'][i] == -1:  # sell trade signal
+            elif data['Position'].iloc[i] == -1:  # sell trade signal
                 place_order(api, ticker, 1, 'sell')
 
     print("Trading bot has completed running.")
