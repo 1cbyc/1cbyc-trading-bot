@@ -8,11 +8,11 @@ import time
 def main():
     load_dotenv()
 
-    # tickers = ['AAPL', 'GOOGL', 'MSFT']
+    tickers = ['AAPL', 'GOOGL', 'MSFT']
     # let me trade chips like NVIDIA only for now:
     # tickers = ['NVDA', 'AMD', 'INTC', 'QCOM', 'AVGO', 'TXN', 'MU', 'AMAT', 'LRCX', 'ASML']
     # trade for AI
-    tickers = ['GOOGL', 'MSFT', 'NVDA', 'IBM', 'AMZN', 'META', 'BIDU', 'CRM', 'ADBE', 'TSLA']
+    # tickers = ['GOOGL', 'MSFT', 'NVDA', 'IBM', 'AMZN', 'META', 'BIDU', 'CRM', 'ADBE', 'TSLA']
     # trade for real estate:
     # tickers = ['AMT', 'PLD', 'CCI', 'SPG', 'EQIX', 'PSA', 'DLR', 'AVB', 'EQR', 'O']
 
