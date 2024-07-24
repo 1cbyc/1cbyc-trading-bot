@@ -1,0 +1,1 @@
+# will isolate the bot trading for stocks soon
