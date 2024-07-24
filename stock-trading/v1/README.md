@@ -1,4 +1,4 @@
-# 1cbyc Trading Bot - For Stocks
+# 1cbyc Trading Bot - For Stocks (v1 Release Notes)
 
 ## Overview
 
