@@ -32,13 +32,13 @@ def main():
         last_action = None
         for i in range(len(data)):
             if data['Position'].iloc[i] == 1 and last_action != 'buy':  # buy trade signal
-                place_order(api, ticker, 1, 'buy')
+                place_order(api, ticker, 10, 'buy')
                 last_action = 'buy'
-                time.sleep(1)  # a delay to prevent wash trades
-            elif data['Position'].iloc[i] == -1 and last_action != 'sell':  # sell trade signal
-                place_order(api, ticker, 1, 'sell')
-                last_action = 'sell'
-                time.sleep(1)  # a delay to prevent wash trades
+                time.sleep(1)  # ah no wan wash trades
+            # elif data['Position'].iloc[i] == -1 and last_action != 'sell':  # sell trade signal
+            #     place_order(api, ticker, 1, 'sell')
+            #     last_action = 'sell'
+            #     time.sleep(1)  # i set this delay to prevent wash trades
 
     print("Trading bot has completed running.")
 
