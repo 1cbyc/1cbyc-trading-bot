@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
 
+# def moving_average_strategy(data, short_window, long_window):
+#     data['SMA_Short'] = data['Close'].rolling(window=short_window).mean()
+#     data['SMA_Long'] = data['Close'].rolling(window=long_window).mean()
 def moving_average_strategy(data, short_window, long_window):
-    data['SMA_Short'] = data['Close'].rolling(window=short_window).mean()
-    data['SMA_Long'] = data['Close'].rolling(window=long_window).mean()
+    data['SMA_Short'] = data['Close'].rolling(window=short_window, min_periods=1).mean()
+    data['SMA_Long'] = data['Close'].rolling(window=long_window, min_periods=1).mean()
 
     # generated signals
     data['Signal'] = 0
