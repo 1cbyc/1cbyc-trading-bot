@@ -10,7 +10,11 @@ def main():
 
     # tickers = ['AAPL', 'GOOGL', 'MSFT']
     # let me trade chips like NVIDIA only for now:
-    tickers = ['NVDA', 'AMD', 'INTC', 'QCOM', 'AVGO', 'TXN', 'MU', 'AMAT', 'LRCX', 'ASML']
+    # tickers = ['NVDA', 'AMD', 'INTC', 'QCOM', 'AVGO', 'TXN', 'MU', 'AMAT', 'LRCX', 'ASML']
+    # trade for AI
+    tickers = ['GOOGL', 'MSFT', 'NVDA', 'IBM', 'AMZN', 'META', 'BIDU', 'CRM', 'ADBE', 'TSLA']
+    # trade for real estate:
+    # tickers = ['AMT', 'PLD', 'CCI', 'SPG', 'EQIX', 'PSA', 'DLR', 'AVB', 'EQR', 'O']
 
     start_date = "2024-01-01"
     end_date = "2024-12-31"
@@ -34,7 +38,7 @@ def main():
         last_action = None
         for i in range(len(data)):
             if data['Position'].iloc[i] == 1 and last_action != 'buy':  # buy trade signal
-                place_order(api, ticker, 10, 'buy')
+                place_order(api, ticker, 1, 'buy')
                 last_action = 'buy'
                 time.sleep(1)  # ah no wan wash trades
             # elif data['Position'].iloc[i] == -1 and last_action != 'sell':  # sell trade signal
