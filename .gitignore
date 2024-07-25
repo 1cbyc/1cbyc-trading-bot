@@ -125,3 +125,4 @@ data/
 # Ignore any other sensitive information
 secrets.json
 api_keys.json
+config.py
