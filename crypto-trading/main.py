@@ -23,7 +23,7 @@ def run_bot():
             time.sleep(3600)  # to allow trade run every hour
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(60)  # this would allo it wait before retrying
+            time.sleep(60)  # this would allow it wait before retrying
 
 if __name__ == "__main__":
     run_bot()
