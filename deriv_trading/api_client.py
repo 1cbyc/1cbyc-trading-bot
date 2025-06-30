@@ -14,6 +14,8 @@ class DerivAPIClient:
         self.callbacks = {}
         self.pending_requests = {}
         self.request_id = 0
+        self.account_balance = 0.0
+        self.account_currency = 'USD'
         
     def connect(self):
         """Establish WebSocket connection to Deriv API"""
@@ -67,8 +69,14 @@ class DerivAPIClient:
                 else:
                     print("✅ Authorization successful")
                     account_info = data.get('authorize', {})
-                    print(f"💰 Balance: {account_info.get('balance', 'N/A')} {account_info.get('currency', 'USD')}")
+                    balance = float(account_info.get('balance', 0))
+                    currency = account_info.get('currency', 'USD')
+                    print(f"💰 Balance: {balance} {currency}")
                     print(f"🏦 Account: {account_info.get('loginid', 'N/A')}")
+                    
+                    # Store balance for later use
+                    self.account_balance = balance
+                    self.account_currency = currency
             
             # Handle other responses
             elif 'req_id' in data:

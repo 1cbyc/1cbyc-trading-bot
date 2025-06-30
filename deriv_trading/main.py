@@ -113,14 +113,33 @@ class DerivTradingBot:
     
     def _get_balance(self):
         """Get and update account balance"""
-        def balance_callback(data):
-            if 'error' not in data:
-                balance = float(data.get('get_settings', {}).get('balance', 0))
-                self.risk_manager.update_balance(balance)
-                print(f"💰 Current balance: ${balance:.2f}")
+        # Wait a bit for authorization to complete
+        time.sleep(2)
         
-        self.api_client.get_balance(balance_callback)
-        time.sleep(1)
+        # Use balance from authorization response
+        if hasattr(self.api_client, 'account_balance') and self.api_client.account_balance > 0:
+            balance = self.api_client.account_balance
+            self.risk_manager.update_balance(balance)
+            print(f"💰 Using balance from authorization: ${balance:.2f}")
+        else:
+            # Fallback to get_balance request
+            def balance_callback(data):
+                if 'error' not in data:
+                    # Try different possible balance fields
+                    balance = 0
+                    if 'get_settings' in data:
+                        balance = float(data.get('get_settings', {}).get('balance', 0))
+                    elif 'authorize' in data:
+                        balance = float(data.get('authorize', {}).get('balance', 0))
+                    
+                    if balance > 0:
+                        self.risk_manager.update_balance(balance)
+                        print(f"💰 Current balance: ${balance:.2f}")
+                    else:
+                        print(f"⚠️  Could not parse balance from response: {data}")
+            
+            self.api_client.get_balance(balance_callback)
+            time.sleep(1)
     
     def _trading_loop(self):
         """Main trading loop"""
@@ -134,10 +153,14 @@ class DerivTradingBot:
                     time.sleep(60)  # Wait 1 minute before checking again
                     continue
                 
+                print(f"🔄 Processing {len(self.symbols)} symbols...")
+                
                 # Process each symbol with rotation
                 for i, symbol in enumerate(self.symbols):
                     if not self.running:
                         break
+                    
+                    print(f"📊 Processing {symbol} ({i+1}/{len(self.symbols)})")
                     
                     # Add small delay between symbols to avoid overwhelming the API
                     if i > 0:
@@ -146,6 +169,7 @@ class DerivTradingBot:
                     self._process_symbol(symbol)
                 
                 # Wait before next iteration
+                print("⏳ Waiting 10 seconds before next iteration...")
                 time.sleep(10)  # Increased delay for multi-instrument trading
                 
             except Exception as e:
@@ -172,13 +196,21 @@ class DerivTradingBot:
                     self.symbol_performance[symbol]['last_signal'] = signal
                     self.symbol_performance[symbol]['last_signal_time'] = datetime.now()
                     
-                    # Debug output for strong signals
-                    if signal != "HOLD" and confidence > 0.5:
-                        print(f"🔍 Strong signal: {symbol} {signal} (confidence: {confidence:.2f})")
+                    # Debug output for all signals
+                    if signal != "HOLD":
+                        print(f"🔍 Signal detected: {symbol} {signal} (confidence: {confidence:.2f})")
                     
                     # More aggressive threshold for faster trading
                     if signal != "HOLD" and confidence > 0.4:
+                        print(f"🎯 Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
                         self._execute_trade(symbol, signal, confidence)
+                    elif signal != "HOLD":
+                        print(f"⚠️  Signal too weak: {symbol} {signal} (confidence: {confidence:.2f} < 0.4)")
+                else:
+                    if 'error' in data:
+                        print(f"❌ Error getting candles for {symbol}: {data['error']}")
+                    else:
+                        print(f"⚠️  No candles data for {symbol}")
             
             # Get recent candles (last 100)
             self.api_client.get_candles(symbol, 60, 100, candles_callback)
@@ -195,12 +227,15 @@ class DerivTradingBot:
             # Reduce position size for multi-instrument trading
             position_size = base_position_size * 0.5  # Use 50% of normal size
             
-            # Check if we can trade
-            if not self.risk_manager.can_trade(position_size):
-                return
-            
             print(f"🎯 Signal: {symbol} {direction} (confidence: {confidence:.2f})")
             print(f"💰 Position size: ${position_size:.2f}")
+            
+            # Check if we can trade
+            if not self.risk_manager.can_trade(position_size):
+                print(f"❌ Risk manager blocked trade for {symbol}")
+                return
+            
+            print(f"✅ Risk check passed, placing trade...")
             
             # Place the trade
             def trade_callback(data):

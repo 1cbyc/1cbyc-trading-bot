@@ -476,10 +476,10 @@ class MultiStrategy(SyntheticTradingStrategy):
         total_confidence = sum(confidence for _, confidence in signals.values())
         avg_confidence = total_confidence / len(signals) if signals else 0
         
-        # Determine final signal
-        if up_count > down_count and up_count > hold_count:
+        # More aggressive logic: if we have any clear signal, use it
+        if up_count > down_count and up_count > 0:
             return "UP", min(avg_confidence * (up_count / len(signals)), 0.95)
-        elif down_count > up_count and down_count > hold_count:
+        elif down_count > up_count and down_count > 0:
             return "DOWN", min(avg_confidence * (down_count / len(signals)), 0.95)
         else:
             return "HOLD", 0.0 
