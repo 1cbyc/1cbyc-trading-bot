@@ -129,6 +129,7 @@ demo-config.py
 # Real trading files (contains real money credentials)
 real.env
 real-config.py
+real_config.py
 
 # Ignore any other sensitive information
 secrets.json
