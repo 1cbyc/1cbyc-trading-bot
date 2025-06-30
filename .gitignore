@@ -130,6 +130,8 @@ demo-config.py
 real.env
 real-config.py
 real_config.py
+micro-config.py
+large-account-config.py
 
 # Ignore any other sensitive information
 secrets.json
