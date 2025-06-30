@@ -10,11 +10,21 @@ class RiskManager:
         self.daily_trades = []
         self.daily_loss = 0.0
         self.daily_start = datetime.now().date()
-        self.max_consecutive_losses = 5
+        self.max_consecutive_losses = 10
         self.consecutive_losses = 0
         self.max_drawdown = 0.20  # 20% max drawdown
         self.initial_balance = None
         self.current_balance = None
+        
+        # Dynamic risk management based on account balance
+        self.max_account_loss_percentage = 0.25  # 25% max loss
+        self.profit_target_percentage = 0.10     # 10% profit target
+        self.max_position_percentage = 0.05      # 5% max per position
+        
+        # Track account performance
+        self.peak_balance = None
+        self.current_drawdown = 0.0
+        self.total_profit_loss = 0.0
         
     def reset_daily_stats(self):
         """Reset daily statistics if it's a new day"""
@@ -26,68 +36,82 @@ class RiskManager:
             print(f"📅 New trading day started: {current_date}")
     
     def can_trade(self, amount: float) -> bool:
-        """Check if we can place a trade based on risk rules"""
+        """Check if we can place a trade based on account balance risk management"""
         self.reset_daily_stats()
+        
+        if not self.current_balance or self.current_balance <= 0:
+            print("❌ No balance available for trading")
+            return False
+        
+        # Check if we've exceeded 25% account loss limit
+        if self.initial_balance:
+            current_loss = self.initial_balance - self.current_balance
+            max_allowed_loss = self.initial_balance * self.max_account_loss_percentage
+            
+            if current_loss >= max_allowed_loss:
+                print(f"❌ Maximum account loss reached: ${current_loss:.2f} (25% of ${self.initial_balance:.2f})")
+                return False
+            
+            # Check remaining risk budget
+            remaining_budget = max_allowed_loss - current_loss
+            if amount > remaining_budget * 0.5:  # Don't use more than 50% of remaining budget
+                print(f"❌ Trade amount too high for remaining risk budget: ${amount:.2f} > ${remaining_budget * 0.5:.2f}")
+                return False
+        
+        # Check if trade amount exceeds 5% of current balance
+        trade_percentage = amount / self.current_balance
+        if trade_percentage > self.max_position_percentage:
+            print(f"❌ Trade amount too high ({trade_percentage:.2%} of balance, max {self.max_position_percentage:.1%})")
+            return False
         
         # Check daily trade limit
         if len(self.daily_trades) >= DerivConfig.MAX_DAILY_TRADES:
             print(f"❌ Daily trade limit reached ({DerivConfig.MAX_DAILY_TRADES})")
             return False
         
-        # Check daily loss limit
-        if self.daily_loss >= DerivConfig.MAX_DAILY_LOSS:
-            print(f"❌ Daily loss limit reached (${self.daily_loss:.2f})")
-            return False
-        
-        # Check consecutive losses
-        if self.consecutive_losses >= self.max_consecutive_losses:
-            print(f"❌ Too many consecutive losses ({self.consecutive_losses})")
-            return False
-        
-        # Check drawdown
-        if self.initial_balance and self.current_balance:
-            drawdown = (self.initial_balance - self.current_balance) / self.initial_balance
-            if drawdown >= self.max_drawdown:
-                print(f"❌ Maximum drawdown reached ({drawdown:.2%})")
-                return False
-        
-        # Check if trade amount is reasonable
-        if self.current_balance:
-            trade_percentage = amount / self.current_balance
-            if trade_percentage > 0.05:  # Max 5% per trade
-                print(f"❌ Trade amount too high ({trade_percentage:.2%} of balance)")
-                return False
-        
         return True
     
-    def calculate_position_size(self, confidence: float, base_amount: float = None) -> float:
-        """Calculate position size based on confidence and risk"""
+    def calculate_position_size(self, confidence: float, base_amount: Optional[float] = None) -> float:
+        """Calculate position size based on account balance and confidence"""
         if base_amount is None:
             base_amount = DerivConfig.DEFAULT_AMOUNT
         
-        # Adjust position size based on confidence
+        # Ensure base_amount is float
+        base_amount = float(base_amount)
+        
+        if not self.current_balance or self.current_balance <= 0:
+            return base_amount
+        
+        # Calculate maximum safe position size based on account balance
+        max_safe_position = self.current_balance * self.max_position_percentage
+        
+        # Calculate remaining risk budget
+        current_loss = self.initial_balance - self.current_balance if self.initial_balance else 0
+        max_allowed_loss = self.initial_balance * self.max_account_loss_percentage if self.initial_balance else 0
+        remaining_risk_budget = max(0, max_allowed_loss - current_loss)
+        
+        # Position size based on confidence and remaining risk budget
         if confidence >= 0.8:
-            size_multiplier = 1.0  # Full position for high confidence
+            leverage_multiplier = 3.0  # Very high confidence
+        elif confidence >= 0.7:
+            leverage_multiplier = 2.0  # High confidence
         elif confidence >= 0.6:
-            size_multiplier = 0.7  # Reduced position for medium confidence
+            leverage_multiplier = 1.5  # Medium-high confidence
         else:
-            size_multiplier = 0.5  # Small position for low confidence
+            leverage_multiplier = 1.0  # Low confidence
         
-        # Adjust for consecutive losses (reduce position size)
-        if self.consecutive_losses > 0:
-            loss_multiplier = max(0.3, 1.0 - (self.consecutive_losses * 0.1))
-            size_multiplier *= loss_multiplier
+        # Calculate position size
+        position_size = base_amount * leverage_multiplier
         
-        # Adjust for daily loss (reduce position size)
-        if self.daily_loss > 0:
-            daily_loss_ratio = self.daily_loss / DerivConfig.MAX_DAILY_LOSS
-            daily_multiplier = max(0.5, 1.0 - daily_loss_ratio)
-            size_multiplier *= daily_multiplier
+        # Limit by remaining risk budget
+        if remaining_risk_budget > 0:
+            position_size = min(position_size, remaining_risk_budget * 0.5)  # Use 50% of remaining budget
         
-        position_size = base_amount * size_multiplier
+        # Limit by max safe position
+        position_size = min(position_size, max_safe_position)
         
         # Ensure minimum and maximum limits
-        position_size = max(1.0, min(position_size, 50.0))
+        position_size = max(1.0, min(position_size, 200.0))
         
         return round(position_size, 2)
     
@@ -124,12 +148,55 @@ class RiskManager:
         print(f"💰 Daily P&L: ${self.daily_loss:.2f} | Consecutive losses: {self.consecutive_losses}")
     
     def update_balance(self, balance: float):
-        """Update current account balance"""
+        """Update current account balance and track performance"""
         if self.initial_balance is None:
             self.initial_balance = balance
+            self.peak_balance = balance
             print(f"💰 Initial balance set: ${balance:.2f}")
         
         self.current_balance = balance
+        
+        # Update peak balance
+        if self.peak_balance is None or balance > self.peak_balance:
+            self.peak_balance = balance
+        
+        # Calculate current drawdown
+        if self.peak_balance:
+            self.current_drawdown = (self.peak_balance - balance) / self.peak_balance
+        
+        # Calculate total P&L
+        if self.initial_balance:
+            self.total_profit_loss = balance - self.initial_balance
+    
+    def should_take_profit(self) -> bool:
+        """Check if we should take profit based on 10% account target"""
+        if not self.initial_balance or not self.current_balance:
+            return False
+        
+        profit_percentage = (self.current_balance - self.initial_balance) / self.initial_balance
+        return profit_percentage >= self.profit_target_percentage
+    
+    def get_account_status(self) -> Dict:
+        """Get current account status and risk metrics"""
+        if not self.initial_balance or not self.current_balance:
+            return {}
+        
+        current_loss = self.initial_balance - self.current_balance
+        max_allowed_loss = self.initial_balance * self.max_account_loss_percentage
+        remaining_budget = max(0, max_allowed_loss - current_loss)
+        profit_percentage = (self.current_balance - self.initial_balance) / self.initial_balance
+        
+        return {
+            'initial_balance': self.initial_balance,
+            'current_balance': self.current_balance,
+            'total_pnl': self.total_profit_loss,
+            'profit_percentage': profit_percentage,
+            'current_loss': current_loss,
+            'max_allowed_loss': max_allowed_loss,
+            'remaining_risk_budget': remaining_budget,
+            'current_drawdown': self.current_drawdown,
+            'should_take_profit': self.should_take_profit()
+        }
     
     def get_daily_stats(self) -> Dict:
         """Get daily trading statistics"""

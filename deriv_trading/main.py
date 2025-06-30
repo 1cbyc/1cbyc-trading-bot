@@ -18,7 +18,7 @@ class DerivTradingBot:
         if symbols is None:
             self.symbols = [
                 # Volatility Indices
-                'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'R_150', 'R_200',
+                'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
                 # Boom & Crash Indices
                 'BOOM1000', 'CRASH1000', 'BOOM500', 'CRASH500'
             ]
@@ -147,6 +147,20 @@ class DerivTradingBot:
         
         while self.running:
             try:
+                # Check account status and profit targets
+                account_status = self.risk_manager.get_account_status()
+                if account_status:
+                    print(f"📊 Account Status: ${account_status['current_balance']:.2f} | P&L: {account_status['profit_percentage']:.2%} | Risk Budget: ${account_status['remaining_risk_budget']:.2f}")
+                    
+                    # Check if we should take profit
+                    if account_status['should_take_profit']:
+                        print(f"🎯 Profit target reached! Current profit: {account_status['profit_percentage']:.2%}")
+                        # Close all active positions
+                        self._close_all_positions()
+                        print("✅ All positions closed for profit taking")
+                        time.sleep(60)  # Wait before resuming
+                        continue
+                
                 # Check if we should stop trading
                 if self.risk_manager.should_stop_trading():
                     print("⏸️  Risk limits reached, pausing trading...")
@@ -221,58 +235,116 @@ class DerivTradingBot:
     def _execute_trade(self, symbol: str, direction: str, confidence: float):
         """Execute a trade based on signal"""
         try:
-            # Calculate position size (adjusted for multi-instrument)
+            # Calculate position size with aggressive leverage
             base_position_size = self.risk_manager.calculate_position_size(confidence)
             
-            # Reduce position size for multi-instrument trading
-            position_size = base_position_size * 0.5  # Use 50% of normal size
+            # For strong signals, open multiple positions
+            if confidence >= 0.6:
+                num_positions = min(3, int(confidence * 5))  # Up to 3 positions for very strong signals
+                position_size = base_position_size
+            else:
+                num_positions = 1
+                position_size = base_position_size
             
             print(f"🎯 Signal: {symbol} {direction} (confidence: {confidence:.2f})")
-            print(f"💰 Position size: ${position_size:.2f}")
+            print(f"💰 Position size: ${position_size:.2f} x {num_positions} positions")
             
             # Check if we can trade
-            if not self.risk_manager.can_trade(position_size):
+            if not self.risk_manager.can_trade(position_size * num_positions):
                 print(f"❌ Risk manager blocked trade for {symbol}")
                 return
             
-            print(f"✅ Risk check passed, placing trade...")
+            print(f"✅ Risk check passed, placing {num_positions} trade(s)...")
             
-            # Place the trade
-            def trade_callback(data):
-                if 'error' not in data and 'buy' in data:
-                    contract_id = data['buy']['contract_id']
-                    self.active_contracts[contract_id] = {
-                        'symbol': symbol,
-                        'direction': direction,
-                        'amount': position_size,
-                        'timestamp': datetime.now(),
-                        'confidence': confidence
-                    }
-                    print(f"✅ Trade placed: {symbol} {direction} - {contract_id}")
-                    
-                    # Update performance tracking
-                    self.symbol_performance[symbol]['trades'] += 1
-                    
-                    # Monitor the contract
-                    self._monitor_contract(contract_id)
-                else:
-                    error_msg = data.get('error', {}).get('message', 'Unknown error')
-                    print(f"❌ Trade failed for {symbol}: {error_msg}")
-            
-            # Buy contract (5 ticks duration)
-            self.api_client.buy_contract(symbol, position_size, direction, 5, trade_callback)
+            # Place multiple trades for strong signals
+            for i in range(num_positions):
+                def trade_callback(data, pos_num=i+1):
+                    if 'error' not in data and 'buy' in data:
+                        contract_id = data['buy']['contract_id']
+                        self.active_contracts[contract_id] = {
+                            'symbol': symbol,
+                            'direction': direction,
+                            'amount': position_size,
+                            'timestamp': datetime.now(),
+                            'confidence': confidence,
+                            'position_number': pos_num
+                        }
+                        print(f"✅ Trade {pos_num} placed: {symbol} {direction} - {contract_id}")
+                        
+                        # Update performance tracking
+                        self.symbol_performance[symbol]['trades'] += 1
+                        
+                        # Monitor the contract
+                        self._monitor_contract(contract_id)
+                    else:
+                        error_msg = data.get('error', {}).get('message', 'Unknown error')
+                        print(f"❌ Trade {pos_num} failed for {symbol}: {error_msg}")
+                
+                # Buy contract (5 ticks duration)
+                self.api_client.buy_contract(symbol, position_size, direction, 5, trade_callback)
+                
+                # Small delay between multiple trades
+                if i < num_positions - 1:
+                    time.sleep(0.5)
             
         except Exception as e:
             print(f"❌ Error executing trade for {symbol}: {e}")
     
+    def _close_all_positions(self):
+        """Close all active positions"""
+        if not self.active_contracts:
+            return
+        
+        print(f"🔄 Closing {len(self.active_contracts)} active positions...")
+        
+        for contract_id in list(self.active_contracts.keys()):
+            try:
+                # Sell the contract
+                def sell_callback(data):
+                    if 'error' not in data and 'sell' in data:
+                        print(f"✅ Position closed: {contract_id}")
+                    else:
+                        error_msg = data.get('error', {}).get('message', 'Unknown error')
+                        print(f"❌ Failed to close position {contract_id}: {error_msg}")
+                
+                self.api_client.send_request({
+                    "sell": contract_id,
+                    "price": 0  # Market price
+                }, sell_callback)
+                
+                # Remove from active contracts
+                if contract_id in self.active_contracts:
+                    del self.active_contracts[contract_id]
+                    
+            except Exception as e:
+                print(f"❌ Error closing position {contract_id}: {e}")
+    
     def _monitor_contract(self, contract_id: str):
-        """Monitor an active contract for completion"""
+        """Monitor an active contract for completion with early profit-taking"""
         def contract_callback(data):
             if 'error' not in data and 'proposal_open_contract' in data:
                 contract = data['proposal_open_contract']
                 symbol = contract.get('underlying_symbol', 'Unknown')
                 profit = float(contract.get('profit', 0))
                 status = contract.get('status', 'Unknown')
+                
+                # Check if we should close early for profit or to prevent loss
+                if status == 'open':
+                    # Check account status for profit target
+                    account_status = self.risk_manager.get_account_status()
+                    if account_status and account_status['should_take_profit']:
+                        print(f"🎯 Closing {symbol} early for profit target")
+                        self._close_position(contract_id)
+                        return
+                    
+                    # Check if position is going negative and we want to prevent loss
+                    if profit < 0 and contract_id in self.active_contracts:
+                        position_info = self.active_contracts[contract_id]
+                        # Close if loss exceeds 50% of position amount
+                        if abs(profit) > position_info['amount'] * 0.5:
+                            print(f"🛑 Closing {symbol} to prevent further loss (current loss: ${profit:.2f})")
+                            self._close_position(contract_id)
+                            return
                 
                 if status == 'sold':
                     # Update performance tracking
@@ -320,6 +392,24 @@ class DerivTradingBot:
                 check_contract()
         
         threading.Thread(target=periodic_check, daemon=True).start()
+    
+    def _close_position(self, contract_id: str):
+        """Close a specific position"""
+        try:
+            def sell_callback(data):
+                if 'error' not in data and 'sell' in data:
+                    print(f"✅ Position closed early: {contract_id}")
+                else:
+                    error_msg = data.get('error', {}).get('message', 'Unknown error')
+                    print(f"❌ Failed to close position {contract_id}: {error_msg}")
+            
+            self.api_client.send_request({
+                "sell": contract_id,
+                "price": 0  # Market price
+            }, sell_callback)
+            
+        except Exception as e:
+            print(f"❌ Error closing position {contract_id}: {e}")
     
     def _print_final_statistics(self):
         """Print final trading statistics"""
