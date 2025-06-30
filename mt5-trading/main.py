@@ -185,52 +185,91 @@ class MT5TradingBot:
             return "HOLD", 0.0
     
     def place_order(self, symbol: str, order_type: str, volume: float, 
-                   price: float = 0.0, sl: float = 0.0, tp: float = 0.0) -> bool:
-        """Place an order on MT5"""
-        try:
-            # Prepare the request
-            request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": symbol,
-                "volume": volume,
-                "type": mt5.ORDER_TYPE_BUY if order_type == "BUY" else mt5.ORDER_TYPE_SELL,
-                "price": price,
-                "deviation": 20,
-                "magic": 234000,
-                "comment": f"python-mt5-bot-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
-                "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
-            }
-            
-            # Add stop loss and take profit if provided
-            if sl > 0:
-                request["sl"] = sl
-            if tp > 0:
-                request["tp"] = tp
-            
-            # Send the order
-            result = mt5.order_send(request)
-            
-            if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Order failed for {symbol}: {result.comment}")
-                return False
-            
-            print(f"✅ Order placed: {symbol} {order_type} {volume} lots at {result.price}")
-            
-            # Store position info
-            self.active_positions[result.order] = {
-                'symbol': symbol,
-                'type': order_type,
-                'volume': volume,
-                'price': result.price,
-                'time': datetime.now()
-            }
-            
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error placing order for {symbol}: {e}")
-            return False
+                   price: float = 0.0, sl: float = 0.0, tp: float = 0.0, max_retries: int = 3) -> bool:
+        """Place an order on MT5 with retry mechanism for volume issues"""
+        current_volume = volume
+        
+        for attempt in range(max_retries):
+            try:
+                # Prepare the request
+                request = {
+                    "action": mt5.TRADE_ACTION_DEAL,
+                    "symbol": symbol,
+                    "volume": current_volume,
+                    "type": mt5.ORDER_TYPE_BUY if order_type == "BUY" else mt5.ORDER_TYPE_SELL,
+                    "price": price,
+                    "deviation": 20,
+                    "magic": 234000,
+                    # Use a simple, safe comment string for Deriv MT5
+                    "comment": "pythonMT5bot",
+                    "type_time": mt5.ORDER_TIME_GTC,
+                    "type_filling": mt5.ORDER_FILLING_FOK,  # Use Fill or Kill instead of IOC
+                }
+                
+                # Add stop loss and take profit if provided
+                if sl > 0:
+                    request["sl"] = sl
+                if tp > 0:
+                    request["tp"] = tp
+                
+                # Debug: Print the order request
+                print(f"🔍 Order request for {symbol} (attempt {attempt + 1}): {request}")
+                
+                # Send the order
+                result = mt5.order_send(request)
+                
+                # Debug: Print the result
+                print(f"🔍 Order result for {symbol} (attempt {attempt + 1}): {result}")
+                
+                if result is None:
+                    print(f"❌ Order failed for {symbol} (attempt {attempt + 1}): order_send returned None")
+                    print(f"🔍 MT5 last_error: {mt5.last_error()}")
+                    if attempt < max_retries - 1:
+                        current_volume *= 2
+                        print(f"🔄 Retrying with volume {current_volume} (2x previous)")
+                        continue
+                    else:
+                        print(f"❌ All attempts failed for {symbol}")
+                        return False
+                
+                if result.retcode != mt5.TRADE_RETCODE_DONE:
+                    print(f"❌ Order failed for {symbol} (attempt {attempt + 1}): {result.comment}")
+                    print(f"🔍 MT5 last_error: {mt5.last_error()}")
+                    # Check if it's a volume-related error
+                    if "volume" in result.comment.lower() or "lot" in result.comment.lower():
+                        if attempt < max_retries - 1:
+                            current_volume *= 2
+                            print(f"🔄 Volume error detected, retrying with volume {current_volume} (2x previous)")
+                            continue
+                    else:
+                        # Non-volume error, don't retry
+                        print(f"❌ Non-volume error, not retrying")
+                        return False
+                else:
+                    # Success!
+                    print(f"✅ Order placed: {symbol} {order_type} {current_volume} lots at {result.price}")
+                    
+                    # Store position info
+                    self.active_positions[result.order] = {
+                        'symbol': symbol,
+                        'type': order_type,
+                        'volume': current_volume,
+                        'price': result.price,
+                        'time': datetime.now()
+                    }
+                    
+                    return True
+                
+            except Exception as e:
+                print(f"❌ Error placing order for {symbol} (attempt {attempt + 1}): {e}")
+                if attempt < max_retries - 1:
+                    current_volume *= 2
+                    print(f"🔄 Retrying with volume {current_volume} (2x previous)")
+                    continue
+                else:
+                    return False
+        
+        return False
     
     def close_position(self, ticket: int) -> bool:
         """Close a position by ticket"""
@@ -254,7 +293,7 @@ class MT5TradingBot:
                 "magic": 234000,
                 "comment": f"python-mt5-bot-close-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
+                "type_filling": mt5.ORDER_FILLING_FOK,  # Use Fill or Kill instead of IOC
             }
             
             result = mt5.order_send(request)
