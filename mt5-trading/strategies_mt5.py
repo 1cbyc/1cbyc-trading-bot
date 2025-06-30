@@ -146,4 +146,190 @@ class MACDStrategy(SyntheticTradingStrategy):
         elif macd < signal and prev_macd >= prev_signal:
             return "SELL", 0.7
         else:
-            return "HOLD", 0.0 
+            return "HOLD", 0.0
+
+class StochasticStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', k_period: int = 14, d_period: int = 3, oversold: int = 20, overbought: int = 80):
+        super().__init__(symbol, timeframe)
+        self.k_period = k_period
+        self.d_period = d_period
+        self.oversold = oversold
+        self.overbought = overbought
+
+    def calculate_stochastic(self) -> tuple:
+        if len(self.data) < self.k_period:
+            return 50.0, 50.0
+        low_min = self.data['low'].rolling(window=self.k_period).min()
+        high_max = self.data['high'].rolling(window=self.k_period).max()
+        k = 100 * (self.data['close'] - low_min) / (high_max - low_min)
+        d = k.rolling(window=self.d_period).mean()
+        return k.iloc[-1], d.iloc[-1]
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.k_period:
+            return "HOLD", 0.0
+        k, d = self.calculate_stochastic()
+        if k < self.oversold and d < self.oversold:
+            return "BUY", 0.8
+        elif k > self.overbought and d > self.overbought:
+            return "SELL", 0.8
+        else:
+            return "HOLD", 0.0
+
+class WilliamsRStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 14, oversold: int = -80, overbought: int = -20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.oversold = oversold
+        self.overbought = overbought
+
+    def calculate_williams_r(self) -> float:
+        if len(self.data) < self.period:
+            return 0.0
+        high_max = self.data['high'].rolling(window=self.period).max()
+        low_min = self.data['low'].rolling(window=self.period).min()
+        williams_r = -100 * (high_max - self.data['close']) / (high_max - low_min)
+        return williams_r.iloc[-1]
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        wr = self.calculate_williams_r()
+        if wr < self.oversold:
+            return "BUY", 0.8
+        elif wr > self.overbought:
+            return "SELL", 0.8
+        else:
+            return "HOLD", 0.0
+
+class ParabolicSARStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', acceleration: float = 0.02, maximum: float = 0.2):
+        super().__init__(symbol, timeframe)
+        self.acceleration = acceleration
+        self.maximum = maximum
+
+    def calculate_sar(self) -> float:
+        if len(self.data) < 2:
+            return self.data['close'].iloc[-1] if len(self.data) > 0 else 0.0
+        # Simple SAR implementation (not full)
+        sar = self.data['close'].iloc[0]
+        for i in range(1, len(self.data)):
+            prev = self.data['close'].iloc[i-1]
+            curr = self.data['close'].iloc[i]
+            sar = sar + self.acceleration * (curr - sar)
+            if abs(sar - curr) > self.maximum:
+                sar = curr
+        return sar
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < 2:
+            return "HOLD", 0.0
+        sar = self.calculate_sar()
+        price = self.data['close'].iloc[-1]
+        if price > sar:
+            return "BUY", 0.7
+        elif price < sar:
+            return "SELL", 0.7
+        else:
+            return "HOLD", 0.0
+
+class IchimokuStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5'):
+        super().__init__(symbol, timeframe)
+
+    def calculate_ichimoku(self) -> Dict[str, float]:
+        if len(self.data) < 52:
+            return {}
+        high_9 = self.data['high'].rolling(window=9).max()
+        low_9 = self.data['low'].rolling(window=9).min()
+        tenkan_sen = (high_9 + low_9) / 2
+        high_26 = self.data['high'].rolling(window=26).max()
+        low_26 = self.data['low'].rolling(window=26).min()
+        kijun_sen = (high_26 + low_26) / 2
+        high_52 = self.data['high'].rolling(window=52).max()
+        low_52 = self.data['low'].rolling(window=52).min()
+        senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(26)
+        senkou_span_b = ((high_52 + low_52) / 2).shift(26)
+        chikou_span = self.data['close'].shift(-26)
+        return {
+            'tenkan_sen': tenkan_sen.iloc[-1],
+            'kijun_sen': kijun_sen.iloc[-1],
+            'senkou_span_a': senkou_span_a.iloc[-1],
+            'senkou_span_b': senkou_span_b.iloc[-1],
+            'chikou_span': chikou_span.iloc[-1]
+        }
+
+    def get_signal(self) -> Tuple[str, float]:
+        ichimoku = self.calculate_ichimoku()
+        if not ichimoku:
+            return "HOLD", 0.0
+        price = self.data['close'].iloc[-1]
+        if price > ichimoku['senkou_span_a'] and price > ichimoku['senkou_span_b']:
+            return "BUY", 0.7
+        elif price < ichimoku['senkou_span_a'] and price < ichimoku['senkou_span_b']:
+            return "SELL", 0.7
+        else:
+            return "HOLD", 0.0
+
+class MomentumStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 10, threshold: float = 0.5):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.threshold = threshold
+
+    def calculate_momentum(self) -> float:
+        if len(self.data) < self.period:
+            return 0.0
+        return self.data['close'].iloc[-1] - self.data['close'].iloc[-self.period]
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        momentum = self.calculate_momentum()
+        if momentum > self.threshold:
+            return "BUY", 0.7
+        elif momentum < -self.threshold:
+            return "SELL", 0.7
+        else:
+            return "HOLD", 0.0
+
+class MultiStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5'):
+        super().__init__(symbol, timeframe)
+        self.strategies = [
+            MovingAverageCrossover(symbol, timeframe),
+            RSIStrategy(symbol, timeframe),
+            BollingerBandsStrategy(symbol, timeframe),
+            VolatilityBreakoutStrategy(symbol, timeframe),
+            MACDStrategy(symbol, timeframe),
+            StochasticStrategy(symbol, timeframe),
+            WilliamsRStrategy(symbol, timeframe),
+            ParabolicSARStrategy(symbol, timeframe),
+            IchimokuStrategy(symbol, timeframe),
+            MomentumStrategy(symbol, timeframe)
+        ]
+
+    def update_data(self, df: pd.DataFrame):
+        self.data = df.copy()
+        for strat in self.strategies:
+            strat.update_data(df)
+
+    def get_signal(self) -> Tuple[str, float]:
+        signals = []
+        confidences = []
+        for strat in self.strategies:
+            signal, confidence = strat.get_signal()
+            if signal != "HOLD":
+                signals.append(signal)
+                confidences.append(confidence)
+        if not signals:
+            return "HOLD", 0.0
+        buy_count = signals.count("BUY")
+        sell_count = signals.count("SELL")
+        avg_conf = np.mean(confidences) if confidences else 0.0
+        if buy_count > sell_count:
+            return "BUY", avg_conf
+        elif sell_count > buy_count:
+            return "SELL", avg_conf
+        else:
+            return "HOLD", avg_conf 
