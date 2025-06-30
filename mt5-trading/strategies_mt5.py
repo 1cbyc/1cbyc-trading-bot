@@ -332,4 +332,172 @@ class MultiStrategy(SyntheticTradingStrategy):
         elif sell_count > buy_count:
             return "SELL", avg_conf
         else:
-            return "HOLD", avg_conf 
+            return "HOLD", avg_conf
+
+class MeanReversionStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20, std_dev: float = 2.0):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.std_dev = std_dev
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        sma = self.data['close'].rolling(window=self.period).mean()
+        std = self.data['close'].rolling(window=self.period).std()
+        upper_band = sma + (std * self.std_dev)
+        lower_band = sma - (std * self.std_dev)
+        current_price = self.data['close'].iloc[-1]
+        if current_price > upper_band.iloc[-1]:
+            return "SELL", 0.7
+        elif current_price < lower_band.iloc[-1]:
+            return "BUY", 0.7
+        else:
+            return "HOLD", 0.0
+
+class TrendFollowingStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', short_period: int = 10, long_period: int = 30):
+        super().__init__(symbol, timeframe)
+        self.short_period = short_period
+        self.long_period = long_period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.long_period:
+            return "HOLD", 0.0
+        short_ma = self.data['close'].rolling(window=self.short_period).mean()
+        long_ma = self.data['close'].rolling(window=self.long_period).mean()
+        if short_ma.iloc[-1] > long_ma.iloc[-1]:
+            return "BUY", 0.6
+        elif short_ma.iloc[-1] < long_ma.iloc[-1]:
+            return "SELL", 0.6
+        else:
+            return "HOLD", 0.0
+
+class AdvancedVolatilityStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20, multiplier: float = 1.5):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.multiplier = multiplier
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        high_low = self.data['high'] - self.data['low']
+        high_close = np.abs(self.data['high'] - self.data['close'].shift())
+        low_close = np.abs(self.data['low'] - self.data['close'].shift())
+        true_range = np.maximum(high_low, np.maximum(high_close, low_close))
+        atr = true_range.rolling(window=self.period).mean()
+        current_atr = atr.iloc[-1]
+        avg_atr = atr.mean()
+        if current_atr > (avg_atr * self.multiplier):
+            return "BUY", 0.7
+        elif current_atr < (avg_atr / self.multiplier):
+            return "SELL", 0.7
+        else:
+            return "HOLD", 0.0
+
+class SupportResistanceStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        recent_high = self.data['high'].rolling(window=self.period).max().iloc[-1]
+        recent_low = self.data['low'].rolling(window=self.period).min().iloc[-1]
+        current_price = self.data['close'].iloc[-1]
+        if current_price >= recent_high:
+            return "SELL", 0.7
+        elif current_price <= recent_low:
+            return "BUY", 0.7
+        else:
+            return "HOLD", 0.0
+
+class DivergenceStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 14):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def calculate_rsi(self) -> pd.Series:
+        delta = self.data['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=self.period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=self.period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period + 1:
+            return "HOLD", 0.0
+        rsi = self.calculate_rsi()
+        price_change = self.data['close'].iloc[-1] - self.data['close'].iloc[-2]
+        rsi_change = rsi.iloc[-1] - rsi.iloc[-2]
+        if price_change > 0 and rsi_change < 0:
+            return "SELL", 0.7
+        elif price_change < 0 and rsi_change > 0:
+            return "BUY", 0.7
+        else:
+            return "HOLD", 0.0
+
+class VolumePriceStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        avg_volume = self.data['volume'].rolling(window=self.period).mean().iloc[-1]
+        current_volume = self.data['volume'].iloc[-1]
+        if current_volume > avg_volume * 1.5:
+            return "BUY", 0.6
+        elif current_volume < avg_volume * 0.5:
+            return "SELL", 0.6
+        else:
+            return "HOLD", 0.0
+
+class FibonacciRetracementStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        high = self.data['high'].rolling(window=self.period).max().iloc[-1]
+        low = self.data['low'].rolling(window=self.period).min().iloc[-1]
+        diff = high - low
+        if diff == 0:
+            return "HOLD", 0.0
+        level_618 = high - 0.618 * diff
+        current_price = self.data['close'].iloc[-1]
+        if current_price > level_618:
+            return "SELL", 0.6
+        elif current_price < level_618:
+            return "BUY", 0.6
+        else:
+            return "HOLD", 0.0
+
+class AdaptiveStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5'):
+        super().__init__(symbol, timeframe)
+
+    def detect_market_regime(self) -> str:
+        if len(self.data) < 30:
+            return "unknown"
+        returns = self.data['close'].pct_change().dropna()
+        volatility = returns.rolling(window=20).std().iloc[-1]
+        if volatility > 0.02:
+            return "volatile"
+        else:
+            return "stable"
+
+    def get_signal(self) -> Tuple[str, float]:
+        regime = self.detect_market_regime()
+        if regime == "volatile":
+            return "SELL", 0.6
+        elif regime == "stable":
+            return "BUY", 0.6
+        else:
+            return "HOLD", 0.0 
