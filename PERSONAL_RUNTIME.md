@@ -1,9 +1,14 @@
 # running the bots
 
-## Demo Testing:
+## Demo Testing (using launcher):
 ```bash
 cd mt5-trading/demo-trading
 py run-demo.py
+```
+## Demo Testing (direct run):
+```bash
+cd mt5-trading/demo-trading
+py main.py
 ```
 
 ## eal Trading (Large Account):
