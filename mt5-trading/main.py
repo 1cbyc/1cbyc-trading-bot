@@ -301,8 +301,9 @@ class MT5TradingBot:
             if signal != "HOLD" and confidence > MT5Config.CONFIDENCE_THRESHOLD:
                 print(f"🎯 Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
                 
-                # Calculate position size using config
-                position_size = MT5Config.VOLUME
+                # Use the correct minimum volume for this symbol
+                position_size = MT5Config.get_min_volume(symbol)
+                print(f"Using position size (min volume) for {symbol}: {position_size}")
                 
                 # Get current price
                 tick = mt5.symbol_info_tick(symbol)
