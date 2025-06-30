@@ -500,4 +500,163 @@ class AdaptiveStrategy(SyntheticTradingStrategy):
         elif regime == "stable":
             return "BUY", 0.6
         else:
+            return "HOLD", 0.0
+
+class ElliottWaveStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', wave_length: int = 20):
+        super().__init__(symbol, timeframe)
+        self.wave_length = wave_length
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.wave_length:
+            return "HOLD", 0.0
+        # Simple wave logic: alternate buy/sell every wave_length
+        idx = len(self.data) // self.wave_length
+        if idx % 2 == 0:
+            return "BUY", 0.5
+        else:
+            return "SELL", 0.5
+
+class HarmonicPatternStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', pattern_length: int = 30):
+        super().__init__(symbol, timeframe)
+        self.pattern_length = pattern_length
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.pattern_length:
+            return "HOLD", 0.0
+        # Placeholder: alternate buy/sell on pattern_length
+        idx = len(self.data) // self.pattern_length
+        if idx % 2 == 0:
+            return "SELL", 0.5
+        else:
+            return "BUY", 0.5
+
+class OrderFlowStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        price_change = self.data['close'].iloc[-1] - self.data['open'].iloc[-1]
+        volume = self.data['volume'].iloc[-1]
+        if price_change > 0 and volume > self.data['volume'].rolling(window=self.period).mean().iloc[-1]:
+            return "BUY", 0.6
+        elif price_change < 0 and volume > self.data['volume'].rolling(window=self.period).mean().iloc[-1]:
+            return "SELL", 0.6
+        else:
+            return "HOLD", 0.0
+
+class MarketMicrostructureStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        spread = self.data['high'].iloc[-1] - self.data['low'].iloc[-1]
+        avg_spread = (self.data['high'] - self.data['low']).rolling(window=self.period).mean().iloc[-1]
+        if spread < avg_spread * 0.5:
+            return "BUY", 0.5
+        elif spread > avg_spread * 1.5:
+            return "SELL", 0.5
+        else:
+            return "HOLD", 0.0
+
+class SentimentAnalysisStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        # Placeholder: use price change as sentiment
+        price_change = self.data['close'].iloc[-1] - self.data['close'].iloc[-self.period]
+        if price_change > 0:
+            return "BUY", 0.5
+        elif price_change < 0:
+            return "SELL", 0.5
+        else:
+            return "HOLD", 0.0
+
+class MomentumDivergenceStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 14):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period + 1:
+            return "HOLD", 0.0
+        price_change = self.data['close'].iloc[-1] - self.data['close'].iloc[-2]
+        momentum = self.data['close'].iloc[-1] - self.data['close'].iloc[-self.period]
+        if price_change > 0 and momentum < 0:
+            return "SELL", 0.6
+        elif price_change < 0 and momentum > 0:
+            return "BUY", 0.6
+        else:
+            return "HOLD", 0.0
+
+class VolatilityRegimeStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        returns = self.data['close'].pct_change().dropna()
+        volatility = returns.rolling(window=self.period).std().iloc[-1]
+        if volatility > 0.02:
+            return "SELL", 0.6
+        elif volatility < 0.01:
+            return "BUY", 0.6
+        else:
+            return "HOLD", 0.0
+
+class PriceActionStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        bullish = (self.data['close'] > self.data['open']).tail(self.period).sum()
+        bearish = (self.data['close'] < self.data['open']).tail(self.period).sum()
+        if bullish > bearish:
+            return "BUY", 0.6
+        elif bearish > bullish:
+            return "SELL", 0.6
+        else:
+            return "HOLD", 0.0
+
+class CorrelationStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        # Placeholder: always hold (needs multi-symbol data)
+        return "HOLD", 0.0
+
+class MachineLearningInspiredStrategy(SyntheticTradingStrategy):
+    def __init__(self, symbol: str, timeframe: str = 'M5', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+
+    def get_signal(self) -> Tuple[str, float]:
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        # Placeholder: use moving average as ML-inspired signal
+        ma = self.data['close'].rolling(window=self.period).mean().iloc[-1]
+        price = self.data['close'].iloc[-1]
+        if price > ma:
+            return "BUY", 0.5
+        elif price < ma:
+            return "SELL", 0.5
+        else:
             return "HOLD", 0.0 

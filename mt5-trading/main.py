@@ -9,17 +9,28 @@ from typing import Dict, List, Optional, Tuple
 import os
 from dotenv import load_dotenv
 
+# Import our custom modules
+from config import MT5Config
+from strategies_mt5 import (
+    SyntheticTradingStrategy, MovingAverageCrossover, RSIStrategy, 
+    BollingerBandsStrategy, VolatilityBreakoutStrategy, MACDStrategy,
+    StochasticStrategy, WilliamsRStrategy, ParabolicSARStrategy,
+    IchimokuStrategy, MomentumStrategy, MeanReversionStrategy,
+    TrendFollowingStrategy, AdvancedVolatilityStrategy, SupportResistanceStrategy,
+    DivergenceStrategy, VolumePriceStrategy, FibonacciRetracementStrategy,
+    AdaptiveStrategy, ElliottWaveStrategy, HarmonicPatternStrategy,
+    OrderFlowStrategy, MarketMicrostructureStrategy, SentimentAnalysisStrategy,
+    MomentumDivergenceStrategy, VolatilityRegimeStrategy, PriceActionStrategy,
+    CorrelationStrategy, MachineLearningInspiredStrategy, MultiStrategy
+)
+
 class MT5TradingBot:
-    """MT5 Trading Bot for Deriv Synthetic Indices"""
+    """MT5 Trading Bot for Deriv Synthetic Indices with Advanced Strategies"""
     
     def __init__(self, symbols: Optional[List[str]] = None, strategy_type: str = 'multi'):
-        # Default symbols - Deriv synthetic indices
+        # Use configuration for symbols and strategy
         if symbols is None:
-            self.symbols = [
-                # Popular Deriv Synthetic Indices
-                'R_100', 'R_75', 'R_50', 'R_25', 'R_10',
-                'VIXBEAR', 'VIXBULL', 'BOOM1000', 'CRASH1000'
-            ]
+            self.symbols = MT5Config.get_symbols_from_env()
         else:
             self.symbols = symbols
             
@@ -28,6 +39,10 @@ class MT5TradingBot:
         self.running = False
         self.active_positions = {}
         self.symbol_performance = {}
+        self.strategies = {}
+        
+        # Initialize strategies for each symbol
+        self._initialize_strategies()
         
         # Initialize performance tracking
         for symbol in self.symbols:
@@ -37,12 +52,28 @@ class MT5TradingBot:
                 'losses': 0,
                 'total_pnl': 0.0,
                 'last_signal': None,
-                'last_signal_time': None
+                'last_signal_time': None,
+                'last_confidence': 0.0
             }
         
         # Set up signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
+    
+    def _initialize_strategies(self):
+        """Initialize strategies for each symbol"""
+        strategy_class_name = MT5Config.get_strategy_class(self.strategy_type)
+        
+        for symbol in self.symbols:
+            try:
+                # Get the strategy class dynamically
+                strategy_class = globals()[strategy_class_name]
+                self.strategies[symbol] = strategy_class(symbol, MT5Config.TIMEFRAME)
+                print(f"✅ Initialized {strategy_class_name} for {symbol}")
+            except Exception as e:
+                print(f"❌ Failed to initialize strategy for {symbol}: {e}")
+                # Fallback to MultiStrategy
+                self.strategies[symbol] = MultiStrategy(symbol, MT5Config.TIMEFRAME)
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals"""
@@ -58,16 +89,12 @@ class MT5TradingBot:
                 print(f"❌ MT5 initialization failed: {mt5.last_error()}")
                 return False
             
-            # Login to Deriv MT5 demo account
-            login = 40704618
-            password = "Wallet2020!"
-            server = "Deriv-Demo"
-            
-            if not mt5.login(login=login, password=password, server=server):
+            # Login to Deriv MT5 demo account using config
+            if not mt5.login(login=MT5Config.MT5_LOGIN, password=MT5Config.MT5_PASSWORD, server=MT5Config.MT5_SERVER):
                 print(f"❌ MT5 login failed: {mt5.last_error()}")
                 return False
             
-            print(f"✅ Logged in to Deriv MT5 account: {login}")
+            print(f"✅ Logged in to Deriv MT5 account: {MT5Config.MT5_LOGIN}")
             
             # Get account info
             account_info = mt5.account_info()
@@ -126,88 +153,35 @@ class MT5TradingBot:
             print(f"❌ Error getting data for {symbol}: {e}")
             return pd.DataFrame()
     
-    def calculate_signals(self, df: pd.DataFrame) -> Tuple[str, float]:
-        """Calculate trading signals using multiple strategies"""
+    def calculate_signals(self, symbol: str, df: pd.DataFrame) -> Tuple[str, float]:
+        """Calculate trading signals using the selected strategy"""
         if len(df) < 50:
             return "HOLD", 0.0
         
-        signals = []
-        confidences = []
-        
-        # Strategy 1: Moving Average Crossover
-        if len(df) >= 20:
-            short_ma = df['close'].rolling(window=10).mean()
-            long_ma = df['close'].rolling(window=20).mean()
+        try:
+            # Update strategy data
+            strategy = self.strategies.get(symbol)
+            if strategy is None:
+                print(f"❌ No strategy found for {symbol}")
+                return "HOLD", 0.0
             
-            if short_ma.iloc[-1] > long_ma.iloc[-1] and short_ma.iloc[-2] <= long_ma.iloc[-2]:
-                signals.append("BUY")
-                confidences.append(0.7)
-            elif short_ma.iloc[-1] < long_ma.iloc[-1] and short_ma.iloc[-2] >= long_ma.iloc[-2]:
-                signals.append("SELL")
-                confidences.append(0.7)
-        
-        # Strategy 2: RSI
-        if len(df) >= 14:
-            delta = df['close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
+            strategy.update_data(df)
             
-            current_rsi = rsi.iloc[-1]
-            if current_rsi < 30:
-                signals.append("BUY")
-                confidences.append(0.8)
-            elif current_rsi > 70:
-                signals.append("SELL")
-                confidences.append(0.8)
-        
-        # Strategy 3: Bollinger Bands
-        if len(df) >= 20:
-            sma = df['close'].rolling(window=20).mean()
-            std = df['close'].rolling(window=20).std()
-            upper_band = sma + (std * 2)
-            lower_band = sma - (std * 2)
+            # Get signal from strategy
+            signal, confidence = strategy.get_signal()
             
-            current_price = df['close'].iloc[-1]
-            if current_price <= lower_band.iloc[-1]:
-                signals.append("BUY")
-                confidences.append(0.6)
-            elif current_price >= upper_band.iloc[-1]:
-                signals.append("SELL")
-                confidences.append(0.6)
-        
-        # Strategy 4: MACD
-        if len(df) >= 26:
-            ema12 = df['close'].ewm(span=12).mean()
-            ema26 = df['close'].ewm(span=26).mean()
-            macd = ema12 - ema26
-            signal_line = macd.ewm(span=9).mean()
+            # Apply strategy weight
+            strategy_weight = MT5Config.get_strategy_weight(strategy.__class__.__name__)
+            adjusted_confidence = confidence * strategy_weight
             
-            if macd.iloc[-1] > signal_line.iloc[-1] and macd.iloc[-2] <= signal_line.iloc[-2]:
-                signals.append("BUY")
-                confidences.append(0.7)
-            elif macd.iloc[-1] < signal_line.iloc[-1] and macd.iloc[-2] >= signal_line.iloc[-2]:
-                signals.append("SELL")
-                confidences.append(0.7)
-        
-        # Combine signals
-        if not signals:
-            return "HOLD", 0.0
-        
-        # Count signals
-        buy_count = signals.count("BUY")
-        sell_count = signals.count("SELL")
-        
-        # Calculate average confidence
-        avg_confidence = np.mean(confidences)
-        
-        # Determine final signal
-        if buy_count > sell_count and buy_count >= 2:
-            return "BUY", avg_confidence
-        elif sell_count > buy_count and sell_count >= 2:
-            return "SELL", avg_confidence
-        else:
+            # Debug output
+            if signal != "HOLD":
+                print(f"🎯 {symbol} - {strategy.__class__.__name__}: {signal} (confidence: {adjusted_confidence:.2f})")
+            
+            return signal, adjusted_confidence
+            
+        except Exception as e:
+            print(f"❌ Error calculating signals for {symbol}: {e}")
             return "HOLD", 0.0
     
     def place_order(self, symbol: str, order_type: str, volume: float, 
@@ -307,27 +281,28 @@ class MT5TradingBot:
             print(f"📊 Processing {symbol}...")
             
             # Get historical data
-            df = self.get_historical_data(symbol, 'M5', 100)
+            df = self.get_historical_data(symbol, MT5Config.TIMEFRAME, MT5Config.DATA_LOOKBACK)
             if df.empty:
                 return
             
             # Calculate signals
-            signal, confidence = self.calculate_signals(df)
+            signal, confidence = self.calculate_signals(symbol, df)
             
             # Update performance tracking
             self.symbol_performance[symbol]['last_signal'] = signal
             self.symbol_performance[symbol]['last_signal_time'] = datetime.now()
+            self.symbol_performance[symbol]['last_confidence'] = confidence
             
             # Debug output
             if signal != "HOLD":
                 print(f"🔍 Signal detected: {symbol} {signal} (confidence: {confidence:.2f})")
             
-            # Execute trades
-            if signal != "HOLD" and confidence > 0.6:
+            # Execute trades using config threshold
+            if signal != "HOLD" and confidence > MT5Config.CONFIDENCE_THRESHOLD:
                 print(f"🎯 Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
                 
-                # Calculate position size (0.01 lot = $1 risk)
-                position_size = 0.01  # Start with minimum lot size
+                # Calculate position size using config
+                position_size = MT5Config.VOLUME
                 
                 # Get current price
                 tick = mt5.symbol_info_tick(symbol)
@@ -337,8 +312,16 @@ class MT5TradingBot:
                 
                 current_price = tick.ask if signal == "BUY" else tick.bid
                 
+                # Calculate stop loss and take profit
+                sl = 0.0
+                tp = 0.0
+                if MT5Config.STOP_LOSS_PERCENT > 0:
+                    sl = current_price * (1 - MT5Config.STOP_LOSS_PERCENT/100) if signal == "BUY" else current_price * (1 + MT5Config.STOP_LOSS_PERCENT/100)
+                if MT5Config.TAKE_PROFIT_PERCENT > 0:
+                    tp = current_price * (1 + MT5Config.TAKE_PROFIT_PERCENT/100) if signal == "BUY" else current_price * (1 - MT5Config.TAKE_PROFIT_PERCENT/100)
+                
                 # Place order
-                if self.place_order(symbol, signal, position_size, current_price):
+                if self.place_order(symbol, signal, position_size, current_price, sl, tp):
                     self.symbol_performance[symbol]['trades'] += 1
                     print(f"✅ Trade placed for {symbol}")
                 else:
@@ -366,9 +349,9 @@ class MT5TradingBot:
                     if i < len(self.symbols) - 1:
                         time.sleep(1)
                 
-                # Wait before next iteration
-                print("⏳ Waiting 60 seconds before next iteration...")
-                time.sleep(60)
+                # Wait before next iteration using config
+                print(f"⏳ Waiting {MT5Config.TRADING_INTERVAL} seconds before next iteration...")
+                time.sleep(MT5Config.TRADING_INTERVAL)
                 
             except Exception as e:
                 print(f"❌ Error in trading loop: {e}")
