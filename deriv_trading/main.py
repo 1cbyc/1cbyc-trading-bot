@@ -214,12 +214,12 @@ class DerivTradingBot:
                     if signal != "HOLD":
                         print(f"🔍 Signal detected: {symbol} {signal} (confidence: {confidence:.2f})")
                     
-                    # More aggressive threshold for faster trading
-                    if signal != "HOLD" and confidence > 0.4:
+                    # Take trades at 0.3 confidence threshold
+                    if signal != "HOLD" and confidence > 0.3:
                         print(f"🎯 Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
                         self._execute_trade(symbol, signal, confidence)
                     elif signal != "HOLD":
-                        print(f"⚠️  Signal too weak: {symbol} {signal} (confidence: {confidence:.2f} < 0.4)")
+                        print(f"⚠️  Signal too weak: {symbol} {signal} (confidence: {confidence:.2f} < 0.3)")
                 else:
                     if 'error' in data:
                         print(f"❌ Error getting candles for {symbol}: {data['error']}")
