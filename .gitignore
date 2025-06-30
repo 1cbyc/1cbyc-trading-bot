@@ -122,6 +122,10 @@ backtests/
 strategies/
 data/
 
+# Demo and test files
+demo.env
+demo-config.py
+
 # Ignore any other sensitive information
 secrets.json
 api_keys.json
