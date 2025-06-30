@@ -11,7 +11,7 @@ def setup_env():
         content = f.read()
     
     # Replace the placeholder with actual token
-    content = content.replace('your_token_here', '9nWde9iVa4UicxH')
+    content = content.replace('your_token_here', 'your_actual_token_here')
     
     # Write the actual .env file
     with open('.env', 'w') as f:

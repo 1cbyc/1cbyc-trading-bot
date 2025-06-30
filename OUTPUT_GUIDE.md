@@ -19,7 +19,7 @@
 ✅ Connected to Deriv API
 ✅ Authorization successful
 💰 Balance: $10000.00 USD
-🏦 Account: 40704618
+🏦 Account: 12345678
 ```
 **What it means:** 
 - Bot connected successfully to Deriv

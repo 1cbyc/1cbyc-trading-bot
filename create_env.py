@@ -10,7 +10,7 @@ def create_env():
 # =======================
 
 # Your Deriv API token (get from https://app.deriv.com/account/api-token)
-DERIV_ACCOUNT_TOKEN=Ryw1syisun35psn
+DERIV_ACCOUNT_TOKEN=your_token_here
 
 # Demo or Live account (true for demo, false for live)
 DERIV_IS_DEMO=true
@@ -31,7 +31,7 @@ DERIV_MAX_DAILY_LOSS=50.00
 DERIV_MAX_DAILY_TRADES=20
 
 # App ID (usually 1089 for demo, 36544 for live)
-DERIV_APP_ID=82871
+DERIV_APP_ID=your_app_id_here
 """
     
     with open('.env', 'w', encoding='utf-8') as f:
