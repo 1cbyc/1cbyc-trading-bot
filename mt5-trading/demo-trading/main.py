@@ -516,6 +516,19 @@ class MT5TradingBot:
             
             pos = position[0]
             
+            # Ensure volume is valid
+            if volume <= 0 or volume >= pos.volume:
+                print(f"❌ Invalid volume for partial close: {volume} (position volume: {pos.volume})")
+                return False
+            
+            # Round volume to 2 decimal places to avoid precision issues
+            volume = round(volume, 2)
+            
+            print(f"🔍 Attempting to close partial position {ticket}:")
+            print(f"   Position volume: {pos.volume}")
+            print(f"   Close volume: {volume}")
+            print(f"   Remaining volume: {pos.volume - volume}")
+            
             # Prepare close request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,

@@ -133,6 +133,14 @@ real_config.py
 micro-config.py
 large-account-config.py
 
+# Real trading folders (contains sensitive information)
+mt5-trading/real-trading/
+mt5-trading/real-trading/*.env
+mt5-trading/real-trading/*.py
+
+# Demo trading folders (safe to commit)
+# mt5-trading/demo-trading/ is NOT ignored - safe for testing
+
 # Ignore any other sensitive information
 secrets.json
 api_keys.json
