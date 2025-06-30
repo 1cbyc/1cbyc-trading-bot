@@ -438,6 +438,7 @@ class MultiStrategy(SyntheticTradingStrategy):
     def __init__(self, symbol: str, timeframe: str = '5m'):
         super().__init__(symbol, timeframe)
         self.strategies = {
+            # Basic strategies (10)
             'ma': MovingAverageCrossover(symbol, timeframe),
             'rsi': RSIStrategy(symbol, timeframe),
             'bb': BollingerBandsStrategy(symbol, timeframe),
@@ -447,7 +448,29 @@ class MultiStrategy(SyntheticTradingStrategy):
             'williams': WilliamsRStrategy(symbol, timeframe),
             'sar': ParabolicSARStrategy(symbol, timeframe),
             'ichimoku': IchimokuStrategy(symbol, timeframe),
-            'momentum': MomentumStrategy(symbol, timeframe)
+            'momentum': MomentumStrategy(symbol, timeframe),
+            
+            # Advanced strategies (8)
+            'mean_reversion': MeanReversionStrategy(symbol, timeframe),
+            'trend_following': TrendFollowingStrategy(symbol, timeframe),
+            'advanced_volatility': AdvancedVolatilityStrategy(symbol, timeframe),
+            'support_resistance': SupportResistanceStrategy(symbol, timeframe),
+            'divergence': DivergenceStrategy(symbol, timeframe),
+            'volume_price': VolumePriceStrategy(symbol, timeframe),
+            'fibonacci': FibonacciRetracementStrategy(symbol, timeframe),
+            'adaptive': AdaptiveStrategy(symbol, timeframe),
+            
+            # Ultra-advanced strategies (10) - NEW ADDITIONS
+            'elliott_wave': ElliottWaveStrategy(symbol, timeframe),
+            'harmonic_pattern': HarmonicPatternStrategy(symbol, timeframe),
+            'order_flow': OrderFlowStrategy(symbol, timeframe),
+            'market_microstructure': MarketMicrostructureStrategy(symbol, timeframe),
+            'sentiment': SentimentAnalysisStrategy(symbol, timeframe),
+            'momentum_divergence': MomentumDivergenceStrategy(symbol, timeframe),
+            'volatility_regime': VolatilityRegimeStrategy(symbol, timeframe),
+            'price_action': PriceActionStrategy(symbol, timeframe),
+            'correlation': CorrelationStrategy(symbol, timeframe),
+            'ml_inspired': MachineLearningInspiredStrategy(symbol, timeframe)
         }
         
     def add_candle(self, candle: Dict):
@@ -457,7 +480,7 @@ class MultiStrategy(SyntheticTradingStrategy):
             strategy.add_candle(candle)
     
     def get_signal(self) -> Tuple[str, float]:
-        """Get combined signal from all strategies"""
+        """Get combined signal from all strategies with weighted voting"""
         signals = {}
         for name, strategy in self.strategies.items():
             try:
@@ -467,19 +490,794 @@ class MultiStrategy(SyntheticTradingStrategy):
                 print(f"Error in strategy {name}: {e}")
                 signals[name] = ("HOLD", 0.0)
         
-        # Count signals
-        up_count = sum(1 for signal, _ in signals.values() if signal == "UP")
-        down_count = sum(1 for signal, _ in signals.values() if signal == "DOWN")
-        hold_count = sum(1 for signal, _ in signals.values() if signal == "HOLD")
+        # Count signals with confidence weighting
+        up_votes = 0.0
+        down_votes = 0.0
+        hold_votes = 0.0
         
-        # Calculate average confidence
-        total_confidence = sum(confidence for _, confidence in signals.values())
-        avg_confidence = total_confidence / len(signals) if signals else 0
+        for name, (signal, confidence) in signals.items():
+            if signal == "UP":
+                up_votes += confidence
+            elif signal == "DOWN":
+                down_votes += confidence
+            else:
+                hold_votes += confidence
         
-        # More aggressive logic: if we have any clear signal, use it
-        if up_count > down_count and up_count > 0:
-            return "UP", min(avg_confidence * (up_count / len(signals)), 0.95)
-        elif down_count > up_count and down_count > 0:
-            return "DOWN", min(avg_confidence * (down_count / len(signals)), 0.95)
+        # Calculate total votes
+        total_votes = up_votes + down_votes + hold_votes
+        
+        if total_votes == 0:
+            return "HOLD", 0.0
+        
+        # Calculate percentages
+        up_percentage = up_votes / total_votes
+        down_percentage = down_votes / total_votes
+        hold_percentage = hold_votes / total_votes
+        
+        # Enhanced signal generation with multiple confirmations
+        # Require stronger consensus for more reliable signals
+        if up_percentage > 0.35 and up_percentage > down_percentage:
+            return "UP", min(up_percentage * 1.5, 0.95)
+        elif down_percentage > 0.35 and down_percentage > up_percentage:
+            return "DOWN", min(down_percentage * 1.5, 0.95)
         else:
-            return "HOLD", 0.0 
+            return "HOLD", 0.0
+
+class MeanReversionStrategy(SyntheticTradingStrategy):
+    """Mean Reversion Strategy using Bollinger Bands and Z-Score"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20, std_dev: float = 2.0):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.std_dev = std_dev
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on mean reversion"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate Bollinger Bands
+        sma = self.data['close'].rolling(window=self.period).mean()
+        std = self.data['close'].rolling(window=self.period).std()
+        
+        upper_band = sma + (std * self.std_dev)
+        lower_band = sma - (std * self.std_dev)
+        
+        current_price = self.data['close'].iloc[-1]
+        current_upper = upper_band.iloc[-1]
+        current_lower = lower_band.iloc[-1]
+        current_sma = sma.iloc[-1]
+        
+        # Calculate Z-Score
+        z_score = (current_price - current_sma) / std.iloc[-1] if std.iloc[-1] > 0 else 0
+        
+        # Mean reversion signals
+        if z_score > 2.0:  # Price too high
+            return "DOWN", min(abs(z_score) / 3, 0.9)
+        elif z_score < -2.0:  # Price too low
+            return "UP", min(abs(z_score) / 3, 0.9)
+        else:
+            return "HOLD", 0.0
+
+class TrendFollowingStrategy(SyntheticTradingStrategy):
+    """Advanced Trend Following with Multiple Timeframes"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', short_period: int = 10, long_period: int = 30):
+        super().__init__(symbol, timeframe)
+        self.short_period = short_period
+        self.long_period = long_period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on trend following"""
+        if len(self.data) < self.long_period:
+            return "HOLD", 0.0
+        
+        # Calculate EMAs
+        ema_short = self.data['close'].ewm(span=self.short_period).mean()
+        ema_long = self.data['close'].ewm(span=self.long_period).mean()
+        
+        # Calculate trend strength
+        current_short = ema_short.iloc[-1]
+        current_long = ema_long.iloc[-1]
+        prev_short = ema_short.iloc[-2]
+        prev_long = ema_long.iloc[-2]
+        
+        # Trend direction and strength
+        trend_direction = 1 if current_short > current_long else -1
+        trend_strength = abs(current_short - current_long) / current_long
+        
+        # Momentum confirmation
+        momentum = (current_short - prev_short) / prev_short if prev_short > 0 else 0
+        
+        if trend_direction > 0 and momentum > 0:
+            return "UP", min(trend_strength * 10, 0.9)
+        elif trend_direction < 0 and momentum < 0:
+            return "DOWN", min(trend_strength * 10, 0.9)
+        else:
+            return "HOLD", 0.0
+
+class AdvancedVolatilityStrategy(SyntheticTradingStrategy):
+    """Advanced Volatility Strategy with Breakout Detection"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20, multiplier: float = 1.5):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        self.multiplier = multiplier
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on volatility breakout"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate True Range
+        high_low = self.data['high'] - self.data['low']
+        high_close = np.abs(self.data['high'] - self.data['close'].shift())
+        low_close = np.abs(self.data['low'] - self.data['close'].shift())
+        
+        true_range = np.maximum(high_low, np.maximum(high_close, low_close))
+        atr = true_range.rolling(window=self.period).mean()
+        
+        # Calculate volatility ratio
+        current_atr = atr.iloc[-1]
+        avg_atr = atr.mean()
+        volatility_ratio = current_atr / avg_atr if avg_atr > 0 else 1
+        
+        # Price momentum
+        price_change = (self.data['close'].iloc[-1] - self.data['close'].iloc[-5]) / self.data['close'].iloc[-5]
+        
+        # Volatility breakout signals
+        if volatility_ratio > self.multiplier:
+            if price_change > 0.01:  # 1% positive momentum
+                return "UP", min(volatility_ratio / 3, 0.9)
+            elif price_change < -0.01:  # 1% negative momentum
+                return "DOWN", min(volatility_ratio / 3, 0.9)
+        
+        return "HOLD", 0.0
+
+class SupportResistanceStrategy(SyntheticTradingStrategy):
+    """Support and Resistance Level Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on support/resistance levels"""
+        if len(self.data) < self.period * 2:
+            return "HOLD", 0.0
+        
+        current_price = self.data['close'].iloc[-1]
+        
+        # Calculate support and resistance levels
+        recent_highs = self.data['high'].rolling(window=self.period).max()
+        recent_lows = self.data['low'].rolling(window=self.period).min()
+        
+        resistance = recent_highs.iloc[-1]
+        support = recent_lows.iloc[-1]
+        
+        # Calculate distance to levels
+        distance_to_resistance = (resistance - current_price) / current_price
+        distance_to_support = (current_price - support) / current_price
+        
+        # Signal generation
+        if distance_to_resistance < 0.005:  # Within 0.5% of resistance
+            return "DOWN", 0.8
+        elif distance_to_support < 0.005:  # Within 0.5% of support
+            return "UP", 0.8
+        else:
+            return "HOLD", 0.0
+
+class DivergenceStrategy(SyntheticTradingStrategy):
+    """RSI Divergence Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 14):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def calculate_rsi(self) -> pd.Series:
+        """Calculate RSI values"""
+        if len(self.data) < self.period + 1:
+            return pd.Series([50.0] * len(self.data))
+        
+        delta = self.data['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=self.period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=self.period).mean()
+        
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        return rsi
+    
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on RSI divergence"""
+        if len(self.data) < self.period * 2:
+            return "HOLD", 0.0
+        
+        rsi = self.calculate_rsi()
+        
+        # Look for divergence in last 10 periods
+        lookback = min(10, len(self.data) // 2)
+        
+        # Price highs and lows
+        price_highs = self.data['high'].rolling(window=3).max()
+        price_lows = self.data['low'].rolling(window=3).min()
+        
+        # RSI highs and lows
+        rsi_highs = rsi.rolling(window=3).max()
+        rsi_lows = rsi.rolling(window=3).min()
+        
+        # Check for bearish divergence (price higher, RSI lower)
+        if (price_highs.iloc[-1] > price_highs.iloc[-lookback] and 
+            rsi_highs.iloc[-1] < rsi_highs.iloc[-lookback]):
+            return "DOWN", 0.9
+        
+        # Check for bullish divergence (price lower, RSI higher)
+        elif (price_lows.iloc[-1] < price_lows.iloc[-lookback] and 
+              rsi_lows.iloc[-1] > rsi_lows.iloc[-lookback]):
+            return "UP", 0.9
+        
+        return "HOLD", 0.0
+
+class VolumePriceStrategy(SyntheticTradingStrategy):
+    """Volume-Price Relationship Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on volume-price relationship"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate volume moving average
+        volume_ma = self.data['volume'].rolling(window=self.period).mean()
+        current_volume = self.data['volume'].iloc[-1]
+        avg_volume = volume_ma.iloc[-1]
+        
+        # Price change
+        price_change = (self.data['close'].iloc[-1] - self.data['close'].iloc[-2]) / self.data['close'].iloc[-2]
+        
+        # Volume ratio
+        volume_ratio = current_volume / avg_volume if avg_volume > 0 else 1
+        
+        # High volume with price movement
+        if volume_ratio > 1.5:  # 50% above average volume
+            if price_change > 0.005:  # 0.5% price increase
+                return "UP", min(volume_ratio / 3, 0.9)
+            elif price_change < -0.005:  # 0.5% price decrease
+                return "DOWN", min(volume_ratio / 3, 0.9)
+        
+        return "HOLD", 0.0
+
+class FibonacciRetracementStrategy(SyntheticTradingStrategy):
+    """Fibonacci Retracement Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on Fibonacci retracement levels"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Find recent swing high and low
+        recent_high = self.data['high'].rolling(window=self.period).max().iloc[-1]
+        recent_low = self.data['low'].rolling(window=self.period).min().iloc[-1]
+        
+        current_price = self.data['close'].iloc[-1]
+        price_range = recent_high - recent_low
+        
+        if price_range == 0:
+            return "HOLD", 0.0
+        
+        # Calculate Fibonacci levels
+        fib_236 = recent_high - (price_range * 0.236)
+        fib_382 = recent_high - (price_range * 0.382)
+        fib_500 = recent_high - (price_range * 0.500)
+        fib_618 = recent_high - (price_range * 0.618)
+        
+        # Check if price is near Fibonacci levels
+        tolerance = price_range * 0.01  # 1% tolerance
+        
+        if abs(current_price - fib_236) < tolerance:
+            return "UP", 0.7
+        elif abs(current_price - fib_382) < tolerance:
+            return "UP", 0.8
+        elif abs(current_price - fib_500) < tolerance:
+            return "UP", 0.9
+        elif abs(current_price - fib_618) < tolerance:
+            return "UP", 0.8
+        
+        return "HOLD", 0.0
+
+class AdaptiveStrategy(SyntheticTradingStrategy):
+    """Adaptive Strategy that changes based on market conditions"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m'):
+        super().__init__(symbol, timeframe)
+        self.market_regime = "trending"  # trending, ranging, volatile
+        
+    def detect_market_regime(self) -> str:
+        """Detect current market regime"""
+        if len(self.data) < 50:
+            return "trending"
+        
+        # Calculate volatility
+        returns = self.data['close'].pct_change()
+        volatility = returns.rolling(window=20).std().iloc[-1]
+        
+        # Calculate trend strength
+        sma_short = self.data['close'].rolling(window=10).mean()
+        sma_long = self.data['close'].rolling(window=30).mean()
+        trend_strength = abs(sma_short.iloc[-1] - sma_long.iloc[-1]) / sma_long.iloc[-1]
+        
+        # Determine regime
+        if volatility > 0.02:  # High volatility
+            return "volatile"
+        elif trend_strength > 0.01:  # Strong trend
+            return "trending"
+        else:
+            return "ranging"
+    
+    def get_signal(self) -> Tuple[str, float]:
+        """Get adaptive trading signal"""
+        if len(self.data) < 50:
+            return "HOLD", 0.0
+        
+        # Update market regime
+        self.market_regime = self.detect_market_regime()
+        
+        # Different strategies for different regimes
+        if self.market_regime == "trending":
+            # Use trend following
+            ema_short = self.data['close'].ewm(span=10).mean()
+            ema_long = self.data['close'].ewm(span=30).mean()
+            
+            if ema_short.iloc[-1] > ema_long.iloc[-1]:
+                return "UP", 0.8
+            else:
+                return "DOWN", 0.8
+                
+        elif self.market_regime == "ranging":
+            # Use mean reversion
+            sma = self.data['close'].rolling(window=20).mean()
+            std = self.data['close'].rolling(window=20).std()
+            
+            current_price = self.data['close'].iloc[-1]
+            current_sma = sma.iloc[-1]
+            current_std = std.iloc[-1]
+            
+            z_score = (current_price - current_sma) / current_std if current_std > 0 else 0
+            
+            if z_score > 1.5:
+                return "DOWN", 0.7
+            elif z_score < -1.5:
+                return "UP", 0.7
+                
+        elif self.market_regime == "volatile":
+            # Use volatility breakout
+            atr = self.data['high'].rolling(window=20).max() - self.data['low'].rolling(window=20).min()
+            avg_atr = atr.mean()
+            current_atr = atr.iloc[-1]
+            
+            if current_atr > avg_atr * 1.5:
+                price_change = (self.data['close'].iloc[-1] - self.data['close'].iloc[-2]) / self.data['close'].iloc[-2]
+                if price_change > 0:
+                    return "UP", 0.8
+                else:
+                    return "DOWN", 0.8
+        
+        return "HOLD", 0.0 
+
+class ElliottWaveStrategy(SyntheticTradingStrategy):
+    """Elliott Wave Pattern Recognition Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', wave_length: int = 20):
+        super().__init__(symbol, timeframe)
+        self.wave_length = wave_length
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on Elliott Wave patterns"""
+        if len(self.data) < self.wave_length:
+            return "HOLD", 0.0
+        
+        # Simplified Elliott Wave detection
+        highs = self.data['high'].rolling(window=5).max()
+        lows = self.data['low'].rolling(window=5).min()
+        
+        # Look for wave patterns in recent data
+        recent_highs = highs.tail(10).values
+        recent_lows = lows.tail(10).values
+        
+        # Detect impulse wave (5-wave pattern)
+        if len(recent_highs) >= 5:
+            # Check for higher highs in waves 1, 3, 5
+            if (recent_highs[-1] > recent_highs[-3] > recent_highs[-5] and
+                recent_lows[-2] > recent_lows[-4]):  # Wave 2 and 4 corrections
+                return "UP", 0.85  # Impulse wave up
+        
+        # Detect correction wave (3-wave pattern)
+        if len(recent_highs) >= 3:
+            if (recent_highs[-1] < recent_highs[-2] and
+                recent_lows[-1] > recent_lows[-2]):
+                return "DOWN", 0.75  # Correction wave down
+        
+        return "HOLD", 0.0
+
+class HarmonicPatternStrategy(SyntheticTradingStrategy):
+    """Harmonic Pattern Recognition (Gartley, Butterfly, Bat, etc.)"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', pattern_length: int = 30):
+        super().__init__(symbol, timeframe)
+        self.pattern_length = pattern_length
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on harmonic patterns"""
+        if len(self.data) < self.pattern_length:
+            return "HOLD", 0.0
+        
+        # Simplified Gartley pattern detection
+        highs = self.data['high'].rolling(window=3).max()
+        lows = self.data['low'].rolling(window=3).min()
+        
+        # Look for XABCD pattern
+        if len(highs) >= 5:
+            X, A, B, C, D = highs.iloc[-5:].values
+            
+            # Gartley pattern ratios (0.618, 0.382, 0.886)
+            AB_ratio = abs(B - A) / abs(X - A) if abs(X - A) > 0 else 0
+            BC_ratio = abs(C - B) / abs(A - B) if abs(A - B) > 0 else 0
+            CD_ratio = abs(D - C) / abs(B - C) if abs(B - C) > 0 else 0
+            
+            # Check if ratios match Gartley pattern
+            if (0.5 < AB_ratio < 0.7 and  # AB should be ~0.618
+                0.3 < BC_ratio < 0.5 and  # BC should be ~0.382
+                0.8 < CD_ratio < 1.0):    # CD should be ~0.886
+                return "UP", 0.9  # Bullish Gartley
+        
+        return "HOLD", 0.0
+
+class OrderFlowStrategy(SyntheticTradingStrategy):
+    """Order Flow Analysis Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on order flow analysis"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Analyze price-volume relationship for order flow
+        volume = self.data['volume']
+        price_change = self.data['close'].pct_change()
+        
+        # Calculate volume-weighted average price (VWAP)
+        typical_price = (self.data['high'] + self.data['low'] + self.data['close']) / 3
+        vwap = (typical_price * volume).rolling(window=self.period).sum() / volume.rolling(window=self.period).sum()
+        
+        current_price = self.data['close'].iloc[-1]
+        current_vwap = vwap.iloc[-1]
+        
+        # Volume surge detection
+        avg_volume = volume.rolling(window=self.period).mean().iloc[-1]
+        current_volume = volume.iloc[-1]
+        volume_surge = current_volume / avg_volume if avg_volume > 0 else 1
+        
+        # Order flow signals
+        if current_price > current_vwap and volume_surge > 1.5:
+            return "UP", min(volume_surge / 2, 0.9)  # Strong buying pressure
+        elif current_price < current_vwap and volume_surge > 1.5:
+            return "DOWN", min(volume_surge / 2, 0.9)  # Strong selling pressure
+        
+        return "HOLD", 0.0
+
+class MarketMicrostructureStrategy(SyntheticTradingStrategy):
+    """Market Microstructure Analysis Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on market microstructure"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate bid-ask spread proxy (high-low spread)
+        spread = (self.data['high'] - self.data['low']) / self.data['close']
+        avg_spread = spread.rolling(window=self.period).mean()
+        current_spread = spread.iloc[-1]
+        
+        # Calculate price efficiency (how quickly price moves)
+        price_efficiency = abs(self.data['close'].pct_change()).rolling(window=self.period).mean()
+        current_efficiency = price_efficiency.iloc[-1]
+        
+        # Market microstructure signals
+        if current_spread < avg_spread.iloc[-1] * 0.8:  # Tight spread
+            if current_efficiency > 0.01:  # High efficiency
+                return "UP", 0.8  # Efficient upward movement
+        elif current_spread > avg_spread.iloc[-1] * 1.2:  # Wide spread
+            if current_efficiency < 0.005:  # Low efficiency
+                return "DOWN", 0.7  # Inefficient downward movement
+        
+        return "HOLD", 0.0
+
+class SentimentAnalysisStrategy(SyntheticTradingStrategy):
+    """Market Sentiment Analysis Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on market sentiment"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate sentiment indicators
+        price_change = self.data['close'].pct_change()
+        
+        # Bullish sentiment: consecutive positive closes
+        bullish_streak = 0
+        for i in range(min(5, len(price_change))):
+            if price_change.iloc[-(i+1)] > 0:
+                bullish_streak += 1
+            else:
+                break
+        
+        # Bearish sentiment: consecutive negative closes
+        bearish_streak = 0
+        for i in range(min(5, len(price_change))):
+            if price_change.iloc[-(i+1)] < 0:
+                bearish_streak += 1
+            else:
+                break
+        
+        # Volume confirmation
+        short_vol_avg = self.data['volume'].rolling(window=5).mean().iloc[-1]
+        long_vol_avg = self.data['volume'].rolling(window=self.period).mean().iloc[-1]
+        
+        # Avoid division by zero
+        if long_vol_avg > 0:
+            volume_trend = short_vol_avg / long_vol_avg
+        else:
+            volume_trend = 1.0  # Default to neutral if no volume data
+        
+        # Sentiment signals
+        if bullish_streak >= 3 and volume_trend > 1.2:
+            return "UP", min(bullish_streak * 0.2, 0.9)  # Strong bullish sentiment
+        elif bearish_streak >= 3 and volume_trend > 1.2:
+            return "DOWN", min(bearish_streak * 0.2, 0.9)  # Strong bearish sentiment
+        
+        return "HOLD", 0.0
+
+class MomentumDivergenceStrategy(SyntheticTradingStrategy):
+    """Momentum Divergence Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 14):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on momentum divergence"""
+        if len(self.data) < self.period * 2:
+            return "HOLD", 0.0
+        
+        # Calculate momentum indicators
+        roc = self.data['close'].pct_change(self.period)  # Rate of Change
+        momentum = self.data['close'] - self.data['close'].shift(self.period)
+        
+        # Look for divergence between price and momentum
+        lookback = min(10, len(self.data) // 2)
+        
+        # Price highs and lows
+        price_highs = self.data['high'].rolling(window=3).max()
+        price_lows = self.data['low'].rolling(window=3).min()
+        
+        # Momentum highs and lows
+        momentum_highs = momentum.rolling(window=3).max()
+        momentum_lows = momentum.rolling(window=3).min()
+        
+        # Bullish divergence: price lower, momentum higher
+        if (price_lows.iloc[-1] < price_lows.iloc[-lookback] and
+            momentum_lows.iloc[-1] > momentum_lows.iloc[-lookback]):
+            return "UP", 0.9
+        
+        # Bearish divergence: price higher, momentum lower
+        elif (price_highs.iloc[-1] > price_highs.iloc[-lookback] and
+              momentum_highs.iloc[-1] < momentum_highs.iloc[-lookback]):
+            return "DOWN", 0.9
+        
+        return "HOLD", 0.0
+
+class VolatilityRegimeStrategy(SyntheticTradingStrategy):
+    """Volatility Regime Detection Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on volatility regime"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate volatility measures
+        returns = self.data['close'].pct_change()
+        volatility = returns.rolling(window=self.period).std()
+        
+        # Calculate volatility of volatility (vol of vol)
+        vol_of_vol = volatility.rolling(window=self.period).std()
+        
+        current_vol = volatility.iloc[-1]
+        current_vol_of_vol = vol_of_vol.iloc[-1]
+        avg_vol = volatility.mean()
+        
+        # Volatility regime detection
+        if current_vol > avg_vol * 1.5:  # High volatility regime
+            if current_vol_of_vol > vol_of_vol.mean() * 1.2:  # Increasing volatility
+                return "DOWN", 0.8  # High volatility often leads to downward pressure
+        elif current_vol < avg_vol * 0.7:  # Low volatility regime
+            if current_vol_of_vol < vol_of_vol.mean() * 0.8:  # Decreasing volatility
+                return "UP", 0.7  # Low volatility often leads to upward movement
+        
+        return "HOLD", 0.0
+
+class PriceActionStrategy(SyntheticTradingStrategy):
+    """Advanced Price Action Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on price action patterns"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Detect candlestick patterns
+        open_prices = self.data['open']
+        close_prices = self.data['close']
+        high_prices = self.data['high']
+        low_prices = self.data['low']
+        
+        # Bullish engulfing pattern
+        if (close_prices.iloc[-1] > open_prices.iloc[-1] and  # Current candle is bullish
+            open_prices.iloc[-1] < close_prices.iloc[-2] and  # Opens below previous close
+            close_prices.iloc[-1] > open_prices.iloc[-2]):    # Closes above previous open
+            return "UP", 0.8
+        
+        # Bearish engulfing pattern
+        elif (close_prices.iloc[-1] < open_prices.iloc[-1] and  # Current candle is bearish
+              open_prices.iloc[-1] > close_prices.iloc[-2] and  # Opens above previous close
+              close_prices.iloc[-1] < open_prices.iloc[-2]):    # Closes below previous open
+            return "DOWN", 0.8
+        
+        # Hammer pattern (bullish reversal)
+        elif (close_prices.iloc[-1] > open_prices.iloc[-1] and
+              (close_prices.iloc[-1] - low_prices.iloc[-1]) > 2 * (high_prices.iloc[-1] - close_prices.iloc[-1])):
+            return "UP", 0.7
+        
+        # Shooting star pattern (bearish reversal)
+        elif (open_prices.iloc[-1] > close_prices.iloc[-1] and
+              (high_prices.iloc[-1] - open_prices.iloc[-1]) > 2 * (open_prices.iloc[-1] - low_prices.iloc[-1])):
+            return "DOWN", 0.7
+        
+        return "HOLD", 0.0
+
+class CorrelationStrategy(SyntheticTradingStrategy):
+    """Cross-Asset Correlation Strategy"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on correlation analysis"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate autocorrelation (price correlation with itself)
+        returns = self.data['close'].pct_change()
+        
+        # Calculate rolling correlation
+        if len(returns) >= self.period:
+            current_corr = returns.tail(self.period).corr(returns.tail(self.period).shift(1))
+            
+            # Strong positive autocorrelation suggests trend continuation
+            if current_corr > 0.3:
+                if returns.iloc[-1] > 0:
+                    return "UP", min(abs(current_corr), 0.9)
+                else:
+                    return "DOWN", min(abs(current_corr), 0.9)
+            
+            # Strong negative autocorrelation suggests mean reversion
+            elif current_corr < -0.3:
+                if returns.iloc[-1] > 0:
+                    return "DOWN", min(abs(current_corr), 0.9)
+                else:
+                    return "UP", min(abs(current_corr), 0.9)
+        
+        return "HOLD", 0.0
+
+class MachineLearningInspiredStrategy(SyntheticTradingStrategy):
+    """Machine Learning-Inspired Pattern Recognition"""
+    
+    def __init__(self, symbol: str, timeframe: str = '5m', period: int = 20):
+        super().__init__(symbol, timeframe)
+        self.period = period
+        
+    def get_signal(self) -> Tuple[str, float]:
+        """Get trading signal based on ML-inspired pattern recognition"""
+        if len(self.data) < self.period:
+            return "HOLD", 0.0
+        
+        # Calculate multiple features (like ML features)
+        features = {}
+        
+        # Price features
+        features['price_momentum'] = self.data['close'].pct_change(5).iloc[-1]
+        features['price_acceleration'] = self.data['close'].pct_change(5).diff().iloc[-1]
+        features['price_volatility'] = self.data['close'].pct_change().rolling(10).std().iloc[-1]
+        
+        # Volume features
+        features['volume_momentum'] = self.data['volume'].pct_change(5).iloc[-1]
+        features['volume_volatility'] = self.data['volume'].pct_change().rolling(10).std().iloc[-1]
+        
+        # Technical features
+        features['rsi'] = self._calculate_rsi()
+        features['macd'] = self._calculate_macd()
+        
+        # Simple ML-inspired decision tree
+        score = 0.0
+        
+        # Bullish conditions
+        if features['price_momentum'] > 0.01: score += 0.2
+        if features['price_acceleration'] > 0: score += 0.2
+        if features['volume_momentum'] > 0.1: score += 0.2
+        if features['rsi'] < 70: score += 0.2
+        if features['macd'] > 0: score += 0.2
+        
+        # Bearish conditions
+        if features['price_momentum'] < -0.01: score -= 0.2
+        if features['price_acceleration'] < 0: score -= 0.2
+        if features['volume_momentum'] < -0.1: score -= 0.2
+        if features['rsi'] > 30: score -= 0.2
+        if features['macd'] < 0: score -= 0.2
+        
+        # Generate signal based on score
+        if score > 0.5:
+            return "UP", min(score, 0.9)
+        elif score < -0.5:
+            return "DOWN", min(abs(score), 0.9)
+        
+        return "HOLD", 0.0
+    
+    def _calculate_rsi(self) -> float:
+        """Calculate RSI"""
+        if len(self.data) < 14:
+            return 50.0
+        
+        delta = self.data['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        return rsi.iloc[-1]
+    
+    def _calculate_macd(self) -> float:
+        """Calculate MACD"""
+        if len(self.data) < 26:
+            return 0.0
+        
+        ema12 = self.data['close'].ewm(span=12).mean()
+        ema26 = self.data['close'].ewm(span=26).mean()
+        macd = ema12 - ema26
+        
+        return macd.iloc[-1] 

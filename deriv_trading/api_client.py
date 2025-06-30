@@ -128,7 +128,7 @@ class DerivAPIClient:
         
         # Send request
         try:
-            self.ws.send(json.dumps(request))
+            self.ws.send(json.dumps(request))  # type: ignore
             return self.request_id
         except Exception as e:
             print(f"❌ Failed to send request: {e}")
@@ -142,7 +142,7 @@ class DerivAPIClient:
         }
         return self.send_request(request, callback)
     
-    def get_candles(self, symbol: str, granularity: int, count: int = 1000, callback: Callable = None):
+    def get_candles(self, symbol: str, granularity: int, count: int = 1000, callback: Optional[Callable] = None):
         """Get historical candles for a symbol"""
         request = {
             "ticks_history": symbol,
@@ -153,12 +153,14 @@ class DerivAPIClient:
             "style": "candles",
             "granularity": granularity
         }
-        return self.send_request(request, callback)
+        return self.send_request(request, callback)  # type: ignore
     
-    def buy_contract(self, symbol: str, amount: float, direction: str, duration: int, callback: Callable = None):
-        """Buy a binary options contract"""
+    def buy_contract(self, symbol: str, amount: float, direction: str, duration: int, callback: Optional[Callable] = None):
+        """Buy a binary options contract (Rise/Fall) for Deriv synthetic indices"""
+        # Deriv expects 'price' as the stake amount at the top level, not in parameters
         request = {
             "buy": 1,
+            "price": amount,  # Stake amount (USD)
             "parameters": {
                 "amount": amount,
                 "basis": "stake",
@@ -169,14 +171,14 @@ class DerivAPIClient:
                 "symbol": symbol
             }
         }
-        return self.send_request(request, callback)
+        return self.send_request(request, callback)  # type: ignore
     
-    def get_balance(self, callback: Callable = None):
+    def get_balance(self, callback: Optional[Callable] = None):
         """Get account balance"""
         request = {
             "get_settings": 1
         }
-        return self.send_request(request, callback)
+        return self.send_request(request, callback)  # type: ignore
     
     def disconnect(self):
         """Disconnect from the API"""

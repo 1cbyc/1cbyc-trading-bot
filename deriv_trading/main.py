@@ -18,9 +18,9 @@ class DerivTradingBot:
         if symbols is None:
             self.symbols = [
                 # Volatility Indices
-                'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-                # Boom & Crash Indices
-                'BOOM1000', 'CRASH1000', 'BOOM500', 'CRASH500'
+                'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
+                # Boom & Crash Indices - REMOVED (not available on this account)
+                # 'BOOM1000', 'CRASH1000', 'BOOM500', 'CRASH500'
             ]
         else:
             self.symbols = symbols
