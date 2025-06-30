@@ -141,7 +141,16 @@ class DerivTradingBot:
                     # Get trading signal
                     signal, confidence = strategy.get_signal()
                     
-                    if signal != "HOLD" and confidence > 0.6:
+                    # Debug output
+                    if signal != "HOLD":
+                        print(f"🔍 Signal detected: {symbol} {signal} (confidence: {confidence:.2f})")
+                    
+                    # Original conservative threshold (commented out)
+                    # if signal != "HOLD" and confidence > 0.6:
+                    #     self._execute_trade(symbol, signal, confidence)
+                    
+                    # More aggressive threshold for faster trading
+                    if signal != "HOLD" and confidence > 0.4:
                         self._execute_trade(symbol, signal, confidence)
             
             # Get recent candles (last 100)
