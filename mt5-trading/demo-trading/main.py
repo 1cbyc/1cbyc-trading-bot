@@ -8,6 +8,13 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 import os
 from dotenv import load_dotenv
+import threading
+
+# Fix Unicode encoding for Windows console
+if sys.platform == "win32":
+    import codecs
+    sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
+    sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
 
 # Import our custom modules
 from config import MT5Config
@@ -57,8 +64,9 @@ class MT5TradingBot:
             }
         
         # Set up signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
+        if threading.current_thread() is threading.main_thread():
+            signal.signal(signal.SIGINT, self._signal_handler)
+            signal.signal(signal.SIGTERM, self._signal_handler)
     
     def _initialize_strategies(self):
         """Initialize strategies for each symbol"""
@@ -69,15 +77,15 @@ class MT5TradingBot:
                 # Get the strategy class dynamically
                 strategy_class = globals()[strategy_class_name]
                 self.strategies[symbol] = strategy_class(symbol, MT5Config.TIMEFRAME)
-                print(f"✅ Initialized {strategy_class_name} for {symbol}")
+                print(f"[OK] Initialized {strategy_class_name} for {symbol}")
             except Exception as e:
-                print(f"❌ Failed to initialize strategy for {symbol}: {e}")
+                print(f"[ERROR] Failed to initialize strategy for {symbol}: {e}")
                 # Fallback to MultiStrategy
                 self.strategies[symbol] = MultiStrategy(symbol, MT5Config.TIMEFRAME)
     
     def _signal_handler(self, signum, frame):
         """Handle shutdown signals"""
-        print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+        print(f"\n[STOP] Received signal {signum}, shutting down gracefully...")
         self.stop()
         sys.exit(0)
     
@@ -86,30 +94,30 @@ class MT5TradingBot:
         try:
             # Initialize MT5
             if not mt5.initialize():
-                print(f"❌ MT5 initialization failed: {mt5.last_error()}")
+                print(f"[ERROR] MT5 initialization failed: {mt5.last_error()}")
                 return False
             
             # Login to Deriv MT5 demo account using config
             if not mt5.login(login=MT5Config.MT5_LOGIN, password=MT5Config.MT5_PASSWORD, server=MT5Config.MT5_SERVER):
-                print(f"❌ MT5 login failed: {mt5.last_error()}")
+                print(f"[ERROR] MT5 login failed: {mt5.last_error()}")
                 return False
             
-            print(f"✅ Logged in to Deriv MT5 account: {MT5Config.MT5_LOGIN}")
+            print(f"[OK] Logged in to Deriv MT5 account: {MT5Config.MT5_LOGIN}")
             
             # Get account info
             account_info = mt5.account_info()
             if account_info:
-                print(f"💰 Balance: ${account_info.balance:.2f}")
-                print(f"💳 Equity: ${account_info.equity:.2f}")
-                print(f"🏦 Account: {account_info.login}")
-                print(f"🏢 Broker: {account_info.company}")
+                print(f"[BALANCE] Balance: ${account_info.balance:.2f}")
+                print(f"[EQUITY] Equity: ${account_info.equity:.2f}")
+                print(f"[ACCOUNT] Account: {account_info.login}")
+                print(f"[BROKER] Broker: {account_info.company}")
             
             self.connected = True
-            print("✅ Connected to Deriv MT5 successfully!")
+            print("[OK] Connected to Deriv MT5 successfully!")
             return True
             
         except Exception as e:
-            print(f"❌ Connection failed: {e}")
+            print(f"[ERROR] Connection failed: {e}")
             return False
     
     def disconnect(self):
@@ -117,7 +125,7 @@ class MT5TradingBot:
         if self.connected:
             mt5.shutdown()
             self.connected = False
-            print("🔌 Disconnected from MT5")
+            print("[DISCONNECT] Disconnected from MT5")
     
     def get_historical_data(self, symbol: str, timeframe: str = 'M5', count: int = 100) -> pd.DataFrame:
         """Get historical data for a symbol"""
@@ -139,7 +147,7 @@ class MT5TradingBot:
             rates = mt5.copy_rates_from_pos(symbol, mt5_timeframe, 0, count)
             
             if rates is None or len(rates) == 0:
-                print(f"⚠️  No data received for {symbol}")
+                print(f"[WARNING] No data received for {symbol}")
                 return pd.DataFrame()
             
             # Convert to DataFrame
@@ -150,7 +158,7 @@ class MT5TradingBot:
             return df
             
         except Exception as e:
-            print(f"❌ Error getting data for {symbol}: {e}")
+            print(f"[ERROR] Error getting data for {symbol}: {e}")
             return pd.DataFrame()
     
     def calculate_signals(self, symbol: str, df: pd.DataFrame) -> Tuple[str, float]:
@@ -162,7 +170,7 @@ class MT5TradingBot:
             # Update strategy data
             strategy = self.strategies.get(symbol)
             if strategy is None:
-                print(f"❌ No strategy found for {symbol}")
+                print(f"[ERROR] No strategy found for {symbol}")
                 return "HOLD", 0.0
             
             strategy.update_data(df)
@@ -176,12 +184,12 @@ class MT5TradingBot:
             
             # Debug output
             if signal != "HOLD":
-                print(f"🎯 {symbol} - {strategy.__class__.__name__}: {signal} (confidence: {adjusted_confidence:.2f})")
+                print(f"[SIGNAL] {symbol} - {strategy.__class__.__name__}: {signal} (confidence: {adjusted_confidence:.2f})")
             
             return signal, adjusted_confidence
             
         except Exception as e:
-            print(f"❌ Error calculating signals for {symbol}: {e}")
+            print(f"[ERROR] Error calculating signals for {symbol}: {e}")
             return "HOLD", 0.0
     
     def place_order(self, symbol: str, order_type: str, volume: float, 
@@ -221,217 +229,166 @@ class MT5TradingBot:
                 # Debug: Print the result
                 print(f"🔍 Order result for {symbol} (attempt {attempt + 1}): {result}")
                 
-                if result is None:
-                    print(f"❌ Order failed for {symbol} (attempt {attempt + 1}): order_send returned None")
-                    print(f"🔍 MT5 last_error: {mt5.last_error()}")
-                    if attempt < max_retries - 1:
-                        current_volume *= 2
-                        print(f"🔄 Retrying with volume {current_volume} (2x previous)")
-                        continue
-                    else:
-                        print(f"❌ All attempts failed for {symbol}")
-                        return False
-                
+                # Check if order was successful
                 if result.retcode != mt5.TRADE_RETCODE_DONE:
-                    print(f"❌ Order failed for {symbol} (attempt {attempt + 1}): {result.comment}")
-                    print(f"🔍 MT5 last_error: {mt5.last_error()}")
-                    # Check if it's a volume-related error
-                    if "volume" in result.comment.lower() or "lot" in result.comment.lower():
-                        if attempt < max_retries - 1:
-                            current_volume *= 2
-                            print(f"🔄 Volume error detected, retrying with volume {current_volume} (2x previous)")
-                            continue
-                    else:
-                        # Non-volume error, don't retry
-                        print(f"❌ Non-volume error, not retrying")
-                        return False
-                else:
-                    # Success!
-                    print(f"✅ Order placed: {symbol} {order_type} {current_volume} lots at {result.price}")
-                    
-                    # Store position info
-                    self.active_positions[result.order] = {
-                        'symbol': symbol,
-                        'type': order_type,
-                        'volume': current_volume,
-                        'price': result.price,
-                        'time': datetime.now()
-                    }
-                    
-                    return True
+                    print(f"[ERROR] Order failed for {symbol} (attempt {attempt + 1}): order_send returned None")
+                    continue
                 
-            except Exception as e:
-                print(f"❌ Error placing order for {symbol} (attempt {attempt + 1}): {e}")
-                if attempt < max_retries - 1:
-                    current_volume *= 2
-                    print(f"🔄 Retrying with volume {current_volume} (2x previous)")
+                # Check for volume-related errors
+                if "invalid volume" in result.comment.lower() or "volume" in result.comment.lower():
+                    print(f"[ERROR] Order failed for {symbol} (attempt {attempt + 1}): {result.comment}")
+                    # Try with smaller volume
+                    current_volume = max(0.01, current_volume * 0.5)
+                    print(f"[RETRY] Trying with volume: {current_volume}")
                     continue
                 else:
-                    return False
+                    print(f"[ERROR] Non-volume error, not retrying")
+                    break
+            
+            except Exception as e:
+                print(f"[ERROR] Error placing order for {symbol} (attempt {attempt + 1}): {e}")
+                return False
         
-        return False
+        # If we get here, all attempts failed
+        if attempt == max_retries:
+            print(f"[ERROR] All attempts failed for {symbol}")
+            return False
+        
+        # Success
+        print(f"[SUCCESS] Order placed: {symbol} {order_type} {current_volume} lots at {result.price}")
+        
+        # Store position info
+        self.active_positions[result.order] = {
+            'symbol': symbol,
+            'type': order_type,
+            'volume': current_volume,
+            'price': result.price,
+            'time': datetime.now()
+        }
+        
+        return True
     
     def close_position(self, ticket: int) -> bool:
         """Close a position by ticket"""
         try:
+            # Get position info
             position = mt5.positions_get(ticket=ticket)
             if not position:
-                print(f"❌ Position {ticket} not found")
+                print(f"[ERROR] Position {ticket} not found")
                 return False
             
-            pos = position[0]
+            position = position[0]
             
             # Prepare close request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": pos.symbol,
-                "volume": pos.volume,
-                "type": mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
+                "symbol": position.symbol,
+                "volume": position.volume,
+                "type": mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY,
                 "position": ticket,
-                "price": mt5.symbol_info_tick(pos.symbol).bid if pos.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(pos.symbol).ask,
+                "price": mt5.symbol_info_tick(position.symbol).ask if position.type == mt5.POSITION_TYPE_BUY else mt5.symbol_info_tick(position.symbol).bid,
                 "deviation": 20,
                 "magic": 234000,
-                "comment": f"python-mt5-bot-close-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                "comment": "python script close",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_FOK,  # Use Fill or Kill instead of IOC
+                "type_filling": mt5.ORDER_FILLING_IOC,
             }
             
+            # Send close request
             result = mt5.order_send(request)
-            
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Failed to close position {ticket}: {result.comment}")
+                print(f"[ERROR] Failed to close position {ticket}: {result.comment}")
                 return False
             
-            print(f"✅ Position closed: {ticket} - Profit: ${result.profit:.2f}")
-            
-            # Remove from active positions
-            if ticket in self.active_positions:
-                del self.active_positions[ticket]
-            
+            print(f"[SUCCESS] Position closed: {ticket} - Profit: ${result.profit:.2f}")
             return True
             
         except Exception as e:
-            print(f"❌ Error closing position {ticket}: {e}")
+            print(f"[ERROR] Error closing position {ticket}: {e}")
             return False
     
     def process_symbol(self, symbol: str):
-        """Process a single symbol for trading opportunities"""
+        """Process a single symbol for trading signals"""
         try:
-            print(f"📊 Processing {symbol}...")
-            
             # Get historical data
-            df = self.get_historical_data(symbol, MT5Config.TIMEFRAME, MT5Config.DATA_LOOKBACK)
+            df = self.get_historical_data(symbol)
             if df.empty:
+                print(f"[ERROR] No price data for {symbol}")
                 return
             
             # Calculate signals
             signal, confidence = self.calculate_signals(symbol, df)
             
-            # Update performance tracking
-            self.symbol_performance[symbol]['last_signal'] = signal
-            self.symbol_performance[symbol]['last_signal_time'] = datetime.now()
-            self.symbol_performance[symbol]['last_confidence'] = confidence
-            
-            # Debug output
-            if signal != "HOLD":
-                print(f"🔍 Signal detected: {symbol} {signal} (confidence: {confidence:.2f})")
-            
-            # Execute trades using config threshold
-            if signal != "HOLD" and confidence > MT5Config.CONFIDENCE_THRESHOLD:
-                print(f"🎯 Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
+            # Execute trade if signal is strong enough
+            if signal != "HOLD" and confidence > 0.6:
+                print(f"[SIGNAL] Executing trade: {symbol} {signal} (confidence: {confidence:.2f})")
                 
-                # Use the correct minimum volume for this symbol
-                position_size = MT5Config.get_min_volume(symbol)
-                print(f"Using position size (min volume) for {symbol}: {position_size}")
+                # Determine order type
+                order_type = "BUY" if signal == "BUY" else "SELL"
                 
-                # Get current price
-                tick = mt5.symbol_info_tick(symbol)
-                if not tick:
-                    print(f"❌ No price data for {symbol}")
-                    return
+                # Calculate volume based on account balance and risk
+                volume = 0.01  # Default small volume
                 
-                current_price = tick.ask if signal == "BUY" else tick.bid
-                
-                # Calculate stop loss and take profit
-                sl = 0.0
-                tp = 0.0
-                if MT5Config.STOP_LOSS_PERCENT > 0:
-                    sl = current_price * (1 - MT5Config.STOP_LOSS_PERCENT/100) if signal == "BUY" else current_price * (1 + MT5Config.STOP_LOSS_PERCENT/100)
-                if MT5Config.TAKE_PROFIT_PERCENT > 0:
-                    tp = current_price * (1 + MT5Config.TAKE_PROFIT_PERCENT/100) if signal == "BUY" else current_price * (1 - MT5Config.TAKE_PROFIT_PERCENT/100)
-                
-                # Place order
-                if self.place_order(symbol, signal, position_size, current_price, sl, tp):
-                    self.symbol_performance[symbol]['trades'] += 1
-                    print(f"✅ Trade placed for {symbol}")
+                # Place the order
+                if self.place_order(symbol, order_type, volume):
+                    print(f"[SUCCESS] Trade placed for {symbol}")
                 else:
-                    print(f"❌ Failed to place trade for {symbol}")
+                    print(f"[ERROR] Failed to place trade for {symbol}")
             
         except Exception as e:
-            print(f"❌ Error processing {symbol}: {e}")
+            print(f"[ERROR] Error processing {symbol}: {e}")
     
     def trading_loop(self):
         """Main trading loop"""
-        print("🔄 Starting MT5 trading loop...")
+        print(f"[INFO] Starting trading loop...")
         
         while self.running:
             try:
-                print(f"🔄 Processing {len(self.symbols)} symbols...")
-                
-                # First, check and manage existing positions
-                self.check_and_manage_positions()
-                
                 # Process each symbol
-                for i, symbol in enumerate(self.symbols):
+                for symbol in self.symbols:
                     if not self.running:
                         break
-                    
                     self.process_symbol(symbol)
-                    
-                    # Small delay between symbols
-                    if i < len(self.symbols) - 1:
-                        time.sleep(1)
+                    time.sleep(1)  # Small delay between symbols
                 
-                # Wait before next iteration using config
-                print(f"⏳ Waiting {MT5Config.TRADING_INTERVAL} seconds before next iteration...")
+                # Check and manage existing positions
+                self.check_and_manage_positions()
+                
+                # Wait before next cycle
                 time.sleep(MT5Config.TRADING_INTERVAL)
                 
             except Exception as e:
-                print(f"❌ Error in trading loop: {e}")
-                time.sleep(10)
+                print(f"[ERROR] Error in trading loop: {e}")
+                time.sleep(5)  # Wait before retrying
     
     def start(self):
         """Start the trading bot"""
-        print("🚀 Starting MT5 Trading Bot...")
-        print(f"📈 Trading symbols: {', '.join(self.symbols)}")
-        print(f"🎯 Strategy: {self.strategy_type}")
-        print(f"📊 Total instruments: {len(self.symbols)}")
+        print(f"[INFO] Strategy: {self.strategy_type}")
+        print(f"[INFO] Symbols: {', '.join(self.symbols)}")
         
         # Connect to MT5
         if not self.connect():
-            print("❌ Failed to connect to MT5")
-            return False
+            print("[ERROR] Failed to connect to MT5")
+            return
         
-        # Start trading
         self.running = True
-        print("✅ MT5 Trading bot started successfully!")
+        print("[SUCCESS] MT5 Trading bot started successfully!")
         
         try:
+            # Start the trading loop
             self.trading_loop()
         except KeyboardInterrupt:
-            print("\n🛑 Trading interrupted by user")
+            print("\n[STOP] Trading interrupted by user")
         except Exception as e:
-            print(f"❌ Trading error: {e}")
+            print(f"[ERROR] Trading error: {e}")
         finally:
             self.stop()
-        
-        return True
     
     def stop(self):
         """Stop the trading bot"""
         self.running = False
         self.disconnect()
-        print("🛑 MT5 Trading bot stopped")
+        print("[STOP] MT5 Trading bot stopped")
         self._print_final_statistics()
     
     def _print_final_statistics(self):
@@ -466,119 +423,80 @@ class MT5TradingBot:
             print(f"  Total P&L: ${total_pnl:.2f}")
     
     def check_and_manage_positions(self):
-        """Check and manage existing positions for profit taking and trailing stops"""
+        """Check and manage existing positions"""
         try:
             positions = mt5.positions_get()
             if not positions:
                 return
             
             for position in positions:
-                symbol = position.symbol
-                ticket = position.ticket
-                volume = position.volume
-                profit = position.profit
-                price_open = position.price_open
-                price_current = position.price_current
-                
                 # Calculate profit percentage
-                if position.type == mt5.ORDER_TYPE_BUY:
-                    profit_percent = ((price_current - price_open) / price_open) * 100
-                else:
-                    profit_percent = ((price_open - price_current) / price_open) * 100
+                profit_percent = (position.profit / position.price) * 100 if position.price > 0 else 0
                 
-                # Dynamic profit taking
-                if MT5Config.ENABLE_DYNAMIC_PROFIT_TAKING and profit_percent > 0:
-                    for level in MT5Config.PROFIT_TAKING_LEVELS:
-                        if profit_percent >= level['profit_percent']:
-                            # Check if we haven't already taken profit at this level
-                            position_key = f"{ticket}_{level['profit_percent']}"
-                            if position_key not in getattr(self, 'profit_taken_levels', set()):
-                                close_volume = volume * level['close_percent']
-                                if self.close_partial_position(ticket, close_volume):
-                                    if not hasattr(self, 'profit_taken_levels'):
-                                        self.profit_taken_levels = set()
-                                    self.profit_taken_levels.add(position_key)
-                                    print(f"💰 Partial profit taken: {symbol} at {profit_percent:.2f}% profit")
+                # Take partial profit if threshold reached
+                if profit_percent >= 50:  # 50% profit
+                    self.close_partial_position(position.ticket, position.volume * 0.5)
+                    print(f"[PROFIT] Partial profit taken: {position.symbol} at {profit_percent:.2f}% profit")
                 
-                # Trailing stop
-                if MT5Config.ENABLE_TRAILING_STOP and profit_percent >= MT5Config.TRAILING_START_PERCENT:
-                    self.update_trailing_stop(position, profit_percent)
-                    
+                # Update trailing stop
+                self.update_trailing_stop(position, profit_percent)
+                
         except Exception as e:
-            print(f"❌ Error managing positions: {e}")
+            print(f"[ERROR] Error managing positions: {e}")
     
     def close_partial_position(self, ticket: int, volume: float) -> bool:
         """Close a partial position"""
         try:
+            # Get position info
             position = mt5.positions_get(ticket=ticket)
             if not position:
                 return False
             
-            pos = position[0]
+            position = position[0]
             
-            # Ensure volume is valid
-            if volume <= 0 or volume >= pos.volume:
-                print(f"❌ Invalid volume for partial close: {volume} (position volume: {pos.volume})")
+            # Validate volume
+            if volume >= position.volume:
+                print(f"[ERROR] Invalid volume for partial close: {volume} (position volume: {position.volume})")
                 return False
             
-            # Round volume to 2 decimal places to avoid precision issues
-            volume = round(volume, 2)
-            
-            print(f"🔍 Attempting to close partial position {ticket}:")
-            print(f"   Position volume: {pos.volume}")
-            print(f"   Close volume: {volume}")
-            print(f"   Remaining volume: {pos.volume - volume}")
-            
-            # Prepare close request
+            # Prepare partial close request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": pos.symbol,
+                "symbol": position.symbol,
                 "volume": volume,
-                "type": mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY,
+                "type": mt5.ORDER_TYPE_SELL if position.type == mt5.POSITION_TYPE_BUY else mt5.ORDER_TYPE_BUY,
                 "position": ticket,
-                "price": mt5.symbol_info_tick(pos.symbol).bid if pos.type == mt5.ORDER_TYPE_BUY else mt5.symbol_info_tick(pos.symbol).ask,
+                "price": mt5.symbol_info_tick(position.symbol).ask if position.type == mt5.POSITION_TYPE_BUY else mt5.symbol_info_tick(position.symbol).bid,
                 "deviation": 20,
                 "magic": 234000,
-                "comment": f"partial-close-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                "comment": "python script partial close",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_FOK,
+                "type_filling": mt5.ORDER_FILLING_IOC,
             }
             
+            # Send partial close request
             result = mt5.order_send(request)
-            
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Failed to close partial position {ticket}: {result.comment}")
+                print(f"[ERROR] Failed to close partial position {ticket}: {result.comment}")
                 return False
             
-            print(f"✅ Partial position closed: {ticket} - Volume: {volume}")
+            print(f"[SUCCESS] Partial position closed: {ticket} - Volume: {volume}")
             return True
             
         except Exception as e:
-            print(f"❌ Error closing partial position {ticket}: {e}")
+            print(f"[ERROR] Error closing partial position {ticket}: {e}")
             return False
     
     def update_trailing_stop(self, position, profit_percent: float):
         """Update trailing stop for a position"""
         try:
-            symbol = position.symbol
-            ticket = position.ticket
-            price_open = position.price_open
-            price_current = position.price_current
-            
-            # Calculate new stop loss level
-            if position.type == mt5.ORDER_TYPE_BUY:
-                new_sl = price_current * (1 - MT5Config.TRAILING_STOP_PERCENT / 100)
-                # Only update if new SL is higher than current SL
-                if new_sl > position.sl:
-                    self.modify_position_sl(ticket, new_sl)
-            else:
-                new_sl = price_current * (1 + MT5Config.TRAILING_STOP_PERCENT / 100)
-                # Only update if new SL is lower than current SL
-                if new_sl < position.sl or position.sl == 0:
-                    self.modify_position_sl(ticket, new_sl)
-                    
+            # Simple trailing stop logic
+            if profit_percent >= 20:  # Start trailing at 20% profit
+                new_sl = position.price_open * 1.05  # 5% profit lock
+                self.modify_position_sl(position.ticket, new_sl)
+                
         except Exception as e:
-            print(f"❌ Error updating trailing stop for {position.symbol}: {e}")
+            print(f"[ERROR] Error updating trailing stop for {position.symbol}: {e}")
     
     def modify_position_sl(self, ticket: int, new_sl: float) -> bool:
         """Modify stop loss for a position"""
@@ -586,20 +504,21 @@ class MT5TradingBot:
             request = {
                 "action": mt5.TRADE_ACTION_SLTP,
                 "position": ticket,
+                "symbol": "Volatility 100 Index",
                 "sl": new_sl,
+                "tp": 0.0
             }
             
             result = mt5.order_send(request)
-            
             if result.retcode != mt5.TRADE_RETCODE_DONE:
-                print(f"❌ Failed to modify SL for position {ticket}: {result.comment}")
+                print(f"[ERROR] Failed to modify SL for position {ticket}: {result.comment}")
                 return False
             
-            print(f"✅ Updated SL for position {ticket} to {new_sl:.5f}")
+            print(f"[SUCCESS] Updated SL for position {ticket} to {new_sl:.5f}")
             return True
             
         except Exception as e:
-            print(f"❌ Error modifying SL for position {ticket}: {e}")
+            print(f"[ERROR] Error modifying SL for position {ticket}: {e}")
             return False
 
 def main():
