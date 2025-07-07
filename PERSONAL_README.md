@@ -55,7 +55,17 @@ mt5.login()               # Authenticate with broker
 mt5.symbol_info()         # Get symbol information
 mt5.order_send()          # Execute trades
 mt5.account_info()        # Get account details
+mt5.positions_get()       # Get open positions
+mt5.history_deals_get()   # Get trade history
+mt5.terminal_info()       # Get terminal information
 ```
+
+### Error Handling & Resilience
+- **Connection Failures**: Automatic reconnection attempts
+- **Order Failures**: Comprehensive error logging and retry logic
+- **Data Validation**: Input sanitization and type checking
+- **Graceful Degradation**: System continues operating with reduced functionality
+- **Logging**: Detailed audit trails for debugging and compliance
 
 ### Process-Based Architecture
 - **Why Process-Based?**: Avoids Python's GIL limitations and threading issues
@@ -141,10 +151,12 @@ python bot_manager.py
 ## 📊 Key Features Explained
 
 ### 1. **Trading Strategy Implementation**
-- **Technical Analysis**: RSI, Moving Averages, MACD
-- **Risk Management**: Stop-loss, take-profit, position sizing
-- **Market Analysis**: Real-time price monitoring
-- **Order Management**: Market and limit orders
+- **Technical Analysis**: RSI, Moving Averages, MACD, Bollinger Bands
+- **Risk Management**: Stop-loss, take-profit, position sizing, risk per trade
+- **Market Analysis**: Real-time price monitoring, volume analysis
+- **Order Management**: Market and limit orders, order modification
+- **Signal Generation**: Entry/exit signals based on technical indicators
+- **Backtesting**: Historical strategy validation (planned feature)
 
 ### 2. **Safety Mechanisms**
 - **Demo/Real Separation**: Complete isolation between environments
@@ -281,6 +293,32 @@ __pycache__/
 3. **Microservices**: Service-oriented architecture
 4. **Containerization**: Docker deployment
 
+## 🔍 Common Questions & Answers
+
+### Technical Questions
+**Q: Why did you choose process-based over threading?**
+A: Python's GIL (Global Interpreter Lock) limits true parallel execution with threads. Processes provide true parallelism, better isolation, and crash recovery.
+
+**Q: How do you handle MT5 connection failures?**
+A: Automatic reconnection logic with exponential backoff, comprehensive error logging, and graceful degradation.
+
+**Q: What's the difference between demo and real trading?**
+A: Identical functionality but complete environment isolation. Real trading requires explicit confirmation and has enhanced safety measures.
+
+### Security Questions
+**Q: How do you protect trading credentials?**
+A: All credentials are in .env files that are gitignored. Process isolation prevents cross-contamination between environments.
+
+**Q: What happens if the bot crashes?**
+A: Process isolation means crashes are contained. The bot manager can restart failed processes automatically.
+
+### Performance Questions
+**Q: How do you measure trading performance?**
+A: Win rate, profit factor, drawdown, and Sharpe ratio are tracked. Real-time monitoring via web interface.
+
+**Q: Can the bot handle multiple symbols?**
+A: Yes, the architecture supports multiple symbols with position management and risk controls per symbol.
+
 ## 📞 Support and Contact
 
 For questions about this project:
@@ -288,6 +326,33 @@ For questions about this project:
 - Check the logs for debugging information
 - Test thoroughly in demo environment before real trading
 
+## 🎯 Project Milestones
+
+### Phase 1: Basic MT5 Integration ✅
+- MT5 connection and authentication
+- Basic order execution
+- Account information retrieval
+
+### Phase 2: Trading Strategy ✅
+- Technical indicators implementation
+- Risk management rules
+- Signal generation logic
+
+### Phase 3: Web Interface ✅
+- Flask web dashboard
+- Real-time monitoring
+- Manual trading interface
+
+### Phase 4: Process Management ✅
+- Bot manager implementation
+- Process isolation
+- Crash recovery
+
+### Phase 5: Future Enhancements 🚧
+- Machine learning integration
+- Multi-broker support
+- Advanced analytics
+
 ---
 
-**⚠️ Disclaimer**: This is a portfolio project for educational purposes. Real trading involves financial risk. Always test strategies thoroughly in demo environments before using real money.
+**⚠️ Disclaimer**: This is a portfolio project for educational purposes. Real trading involves financial risk. Always test strategies thoroughly in demo environments before using real money. 

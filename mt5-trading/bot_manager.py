@@ -45,7 +45,7 @@ class BotManager:
             elif bot_type == "real":
                 script_path = os.path.join(self.base_dir, "real-trading", "main-real.py")
             elif bot_type == "micro":
-                script_path = os.path.join(self.base_dir, "real-trading", "main-micro.py")
+                script_path = os.path.join(self.base_dir, "real-trading", "main-micro-scaling.py")
             else:
                 return False, f"Unknown bot type: {bot_type}"
             
